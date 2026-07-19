@@ -6,6 +6,7 @@ import { AuthProvider } from "./lib/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
 import AuthCallback from "./components/AuthCallback";
+import ThemeApplier from "./components/ThemeApplier";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Principal from "./pages/Principal";
@@ -20,6 +21,8 @@ import Downloads from "./pages/Downloads";
 import Contact from "./pages/Contact";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import Staff from "./pages/Staff";
+import Hostel from "./pages/Hostel";
 import { Privacy, Terms } from "./pages/Legal";
 import "./App.css";
 
@@ -43,6 +46,8 @@ function AppRouter() {
         <Route path="/videos" element={<VideoGallery />} />
         <Route path="/news" element={<News />} />
         <Route path="/downloads" element={<Downloads />} />
+        <Route path="/staff" element={<Staff />} />
+        <Route path="/hostel" element={<Hostel />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
@@ -60,6 +65,7 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <BrowserRouter>
+            <ThemeApplier />
             <AppRouter />
             <Toaster richColors position="top-right" />
           </BrowserRouter>

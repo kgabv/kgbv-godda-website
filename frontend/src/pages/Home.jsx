@@ -25,18 +25,31 @@ export default function Home() {
   const [hero, setHero] = useState(null);
   const [about, setAbout] = useState(null);
   const [gallery, setGallery] = useState([]);
+  const [banners, setBanners] = useState([]);
+  const [stats, setStats] = useState({ students: 500, teachers: 30, classes: 7, awards: 45 });
+  const [bIdx, setBIdx] = useState(0);
 
   useEffect(() => {
     api.get("/site-content/hero").then((r) => setHero(r.data.value)).catch(() => {});
     api.get("/site-content/about").then((r) => setAbout(r.data.value)).catch(() => {});
     api.get("/gallery").then((r) => setGallery(asArray(r.data).slice(0, 6))).catch(() => setGallery([]));
+    api.get("/banners").then((r) => setBanners(asArray(r.data))).catch(() => setBanners([]));
+    api.get("/stats").then((r) => setStats(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (banners.length < 2) return;
+    const t = setInterval(() => setBIdx((i) => (i + 1) % banners.length), 5000);
+    return () => clearInterval(t);
+  }, [banners.length]);
+
+  const heroBg = banners[bIdx]?.image_url || HERO_IMG;
 
   return (
     <div data-testid="home-page">
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <img src={HERO_IMG} alt="" className="absolute inset-0 h-full w-full object-cover" loading="eager" />
+        <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-cover" loading="eager" />
         <div className="absolute inset-0 hero-overlay" />
         <div className="relative max-w-7xl mx-auto px-4 py-24 md:py-36 text-white">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
@@ -61,10 +74,10 @@ export default function Home() {
       {/* Stats */}
       <section className="max-w-7xl mx-auto px-4 py-12" data-testid="stats-section">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <AnimatedCounter end={500} label="छात्राएँ" testId="counter-students" />
-          <AnimatedCounter end={30} label="शिक्षक/स्टाफ" testId="counter-teachers" />
-          <AnimatedCounter end={7} label="कक्षाएँ (VI-XII)" suffix="" testId="counter-classes" />
-          <AnimatedCounter end={45} label="पुरस्कार व सम्मान" testId="counter-awards" />
+          <AnimatedCounter end={Number(stats.students) || 0} label="छात्राएँ" testId="counter-students" />
+          <AnimatedCounter end={Number(stats.teachers) || 0} label="शिक्षक/स्टाफ" testId="counter-teachers" />
+          <AnimatedCounter end={Number(stats.classes) || 0} label="कक्षाएँ (VI-XII)" suffix="" testId="counter-classes" />
+          <AnimatedCounter end={Number(stats.awards) || 0} label="पुरस्कार व सम्मान" testId="counter-awards" />
         </div>
       </section>
 

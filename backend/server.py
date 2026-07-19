@@ -131,6 +131,40 @@ class TeacherIn(BaseModel):
     role: str
     image_url: Optional[str] = ""
     bio: Optional[str] = ""
+    category: Optional[str] = "teaching"  # teaching | non_teaching
+    order: Optional[int] = 0
+
+class BannerIn(BaseModel):
+    title: Optional[str] = ""
+    subtitle: Optional[str] = ""
+    image_url: str
+    link: Optional[str] = ""
+    is_active: bool = True
+    order: Optional[int] = 0
+
+class EventIn(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    date: Optional[str] = ""
+    image_url: Optional[str] = ""
+    is_active: bool = True
+
+class AchievementIn(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    image_url: Optional[str] = ""
+    year: Optional[str] = ""
+
+class FacilityIn(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    icon: Optional[str] = "Sparkles"  # lucide icon name
+    order: Optional[int] = 0
+
+class LinkIn(BaseModel):
+    label: str
+    url: str
+    order: Optional[int] = 0
 
 class ContactMessageIn(BaseModel):
     name: str
@@ -339,6 +373,102 @@ async def delete_teacher(item_id: str, request: Request):
     await db.teachers.delete_one({"id": item_id})
     return {"ok": True}
 
+# ---------- Generic CRUD factory ----------
+def _crud(coll: str, sort_key: str = "order", sort_dir: int = 1):
+    @api_router.get(f"/{coll}")
+    async def _list():
+        items = await db[coll].find({}, {"_id": 0}).sort([(sort_key, sort_dir), ("created_at", -1)]).to_list(500)
+        return items
+    _list.__name__ = f"list_{coll}"
+
+    @api_router.delete(f"/{coll}/{{item_id}}")
+    async def _delete(item_id: str, request: Request):
+        await require_admin(request)
+        await db[coll].delete_one({"id": item_id})
+        return {"ok": True}
+    _delete.__name__ = f"delete_{coll}"
+
+# ---------- Banners ----------
+@api_router.get("/banners")
+async def list_banners(active_only: bool = True):
+    q = {"is_active": True} if active_only else {}
+    return await db.banners.find(q, {"_id": 0}).sort("order", 1).to_list(50)
+
+@api_router.post("/banners")
+async def add_banner(payload: BannerIn, request: Request):
+    await require_admin(request)
+    doc = payload.model_dump()
+    doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.banners.insert_one(doc); doc.pop("_id", None); return doc
+
+@api_router.delete("/banners/{item_id}")
+async def delete_banner(item_id: str, request: Request):
+    await require_admin(request); await db.banners.delete_one({"id": item_id}); return {"ok": True}
+
+# ---------- Events ----------
+@api_router.get("/events")
+async def list_events():
+    return await db.events.find({"is_active": True}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+@api_router.post("/events")
+async def add_event(payload: EventIn, request: Request):
+    await require_admin(request)
+    doc = payload.model_dump()
+    doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.events.insert_one(doc); doc.pop("_id", None); return doc
+
+@api_router.delete("/events/{item_id}")
+async def delete_event(item_id: str, request: Request):
+    await require_admin(request); await db.events.delete_one({"id": item_id}); return {"ok": True}
+
+# ---------- Achievements ----------
+@api_router.get("/achievements")
+async def list_achievements():
+    return await db.achievements.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+@api_router.post("/achievements")
+async def add_achievement(payload: AchievementIn, request: Request):
+    await require_admin(request)
+    doc = payload.model_dump()
+    doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.achievements.insert_one(doc); doc.pop("_id", None); return doc
+
+@api_router.delete("/achievements/{item_id}")
+async def delete_achievement(item_id: str, request: Request):
+    await require_admin(request); await db.achievements.delete_one({"id": item_id}); return {"ok": True}
+
+# ---------- Facilities ----------
+@api_router.get("/facilities")
+async def list_facilities():
+    return await db.facilities.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+
+@api_router.post("/facilities")
+async def add_facility(payload: FacilityIn, request: Request):
+    await require_admin(request)
+    doc = payload.model_dump()
+    doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.facilities.insert_one(doc); doc.pop("_id", None); return doc
+
+@api_router.delete("/facilities/{item_id}")
+async def delete_facility(item_id: str, request: Request):
+    await require_admin(request); await db.facilities.delete_one({"id": item_id}); return {"ok": True}
+
+# ---------- Important Links ----------
+@api_router.get("/links")
+async def list_links():
+    return await db.links.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+
+@api_router.post("/links")
+async def add_link(payload: LinkIn, request: Request):
+    await require_admin(request)
+    doc = payload.model_dump()
+    doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.links.insert_one(doc); doc.pop("_id", None); return doc
+
+@api_router.delete("/links/{item_id}")
+async def delete_link(item_id: str, request: Request):
+    await require_admin(request); await db.links.delete_one({"id": item_id}); return {"ok": True}
+
 # ---------- Contact ----------
 @api_router.post("/contact")
 async def submit_contact(payload: ContactMessageIn):
@@ -387,12 +517,10 @@ async def download_file(path: str):
 # ---------- Public stats ----------
 @api_router.get("/stats")
 async def stats():
-    return {
-        "students": 500,
-        "teachers": 30,
-        "classes": 7,
-        "awards": 45,
-    }
+    doc = await db.site_content.find_one({"key": "stats"}, {"_id": 0})
+    if doc and doc.get("value"):
+        return doc["value"]
+    return {"students": 500, "teachers": 30, "classes": 7, "awards": 45}
 
 @api_router.get("/")
 async def root():
@@ -421,11 +549,65 @@ async def seed():
         "contact": {
             "email": "kgabvgodda@gmail.com",
             "phone": "",
+            "whatsapp": "",
             "address": "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा, झारखंड",
             "youtube": "https://www.youtube.com/@kgbvgodda",
-            "whatsapp": "",
             "map_lat": 24.795789,
             "map_lng": 87.299783,
+        },
+        "vision": {
+            "title": "हमारी दृष्टि",
+            "body": "बालिकाओं को आत्मनिर्भर, आत्मविश्वासी एवं सुसंस्कारित नागरिक बनाना।",
+        },
+        "mission": {
+            "title": "हमारा उद्देश्य",
+            "body": "प्रत्येक बालिका को गुणवत्तापूर्ण शिक्षा एवं सुरक्षित वातावरण उपलब्ध कराना।",
+        },
+        "warden": {
+            "name": "श्रीमती वार्डन",
+            "message": "छात्रावास में हम बालिकाओं को घर जैसा वातावरण प्रदान करते हैं — सुरक्षा, स्वच्छता एवं अनुशासन के साथ।",
+            "photo_url": "",
+        },
+        "stats": {"students": 500, "teachers": 30, "classes": 7, "awards": 45},
+        "social": {
+            "facebook": "", "instagram": "", "twitter": "",
+            "youtube": "https://www.youtube.com/@kgbvgodda", "whatsapp": "",
+        },
+        "footer": {
+            "about_text": "शिक्षा • संस्कार • आत्मनिर्भरता — बालिकाओं के लिए एक सुरक्षित एवं गुणवत्तापूर्ण विद्यालय।",
+            "copyright": "© KGBV Godda. सर्वाधिकार सुरक्षित।",
+        },
+        "seo": {
+            "title": "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा | KGBV Godda",
+            "description": "KGBV Godda — झारखंड शिक्षा विभाग द्वारा संचालित पूर्ण आवासीय बालिका विद्यालय। कक्षा VI-XII।",
+            "keywords": "KGBV, Kasturba Gandhi, Balika Vidyalaya, Godda, Jharkhand",
+        },
+        "admission": {
+            "heading": "प्रवेश जानकारी",
+            "intro": "कक्षा VI से XII तक की छात्राओं के लिए निःशुल्क प्रवेश।",
+            "eligibility": "ग्रामीण/वंचित वर्ग की बालिकाएँ | आयु सीमा: कक्षा अनुसार | आधार कार्ड आवश्यक | जाति प्रमाण पत्र (यदि लागू) | स्थानांतरण प्रमाण पत्र (TC) | अंतिम कक्षा की अंकतालिका",
+            "process": "विद्यालय कार्यालय से आवेदन पत्र प्राप्त करें, आवश्यक दस्तावेजों के साथ जमा करें। चयन प्रक्रिया के बाद प्रवेश सुनिश्चित होगा।",
+        },
+        "academics": {
+            "heading": "शिक्षा (कक्षा VI-XII)",
+            "intro": "हमारी विद्यालय झारखंड शैक्षिक बोर्ड (JAC) पाठ्यक्रम पर आधारित उच्च-गुणवत्ता की शिक्षा प्रदान करता है।",
+        },
+        "hostel": {
+            "heading": "आवासीय छात्रावास",
+            "body": "सुरक्षित, स्वच्छ एवं आरामदायक छात्रावास सुविधा। 24×7 वार्डन उपस्थिति, पौष्टिक भोजन, चिकित्सा सहायता एवं अध्ययन कक्ष।",
+        },
+        "branding": {
+            "logo_url": "https://customer-assets-wrfwihn1.emergentagent.net/job_e3f9b288-4ca0-4b1b-858c-48bc26649331/artifacts/7brhlrkg_IMG_20260704_154418.png",
+            "favicon_url": "https://customer-assets-wrfwihn1.emergentagent.net/job_e3f9b288-4ca0-4b1b-858c-48bc26649331/artifacts/7brhlrkg_IMG_20260704_154418.png",
+            "school_name": "कस्तूरबा गांधी बालिका विद्यालय",
+            "school_name_short": "गोड्डा, झारखंड",
+            "tagline": "शिक्षा · संस्कार · आत्मनिर्भरता",
+        },
+        "theme": {
+            "primary": "#0056B3",
+            "secondary": "#00A0E4",
+            "accent": "#E1F3FB",
+            "background": "#F5F9FE",
         },
     }
     for k, v in defaults.items():

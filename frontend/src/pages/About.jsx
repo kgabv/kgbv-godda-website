@@ -4,7 +4,13 @@ import { Card } from "../components/ui/card";
 
 export default function About() {
   const [about, setAbout] = useState(null);
-  useEffect(() => { api.get("/site-content/about").then((r) => setAbout(r.data.value)); }, []);
+  const [vision, setVision] = useState(null);
+  const [mission, setMission] = useState(null);
+  useEffect(() => {
+    api.get("/site-content/about").then((r) => setAbout(r.data.value)).catch(() => {});
+    api.get("/site-content/vision").then((r) => setVision(r.data.value)).catch(() => {});
+    api.get("/site-content/mission").then((r) => setMission(r.data.value)).catch(() => {});
+  }, []);
   return (
     <div className="max-w-6xl mx-auto px-4 py-12" data-testid="about-page">
       <h1 className="text-4xl md:text-5xl font-extrabold text-primary">विद्यालय परिचय</h1>
@@ -17,12 +23,12 @@ export default function About() {
         </Card>
         <div className="grid gap-4">
           <Card className="p-6 rounded-2xl bg-secondary/10">
-            <div className="font-bold text-primary">हमारा उद्देश्य</div>
-            <p className="text-sm mt-2 hindi">{about?.mission}</p>
+            <div className="font-bold text-primary">{mission?.title || "हमारा उद्देश्य"}</div>
+            <p className="text-sm mt-2 hindi">{mission?.body || about?.mission}</p>
           </Card>
           <Card className="p-6 rounded-2xl bg-accent/40">
-            <div className="font-bold text-primary">हमारी दृष्टि</div>
-            <p className="text-sm mt-2 hindi">{about?.vision}</p>
+            <div className="font-bold text-primary">{vision?.title || "हमारी दृष्टि"}</div>
+            <p className="text-sm mt-2 hindi">{vision?.body || about?.vision}</p>
           </Card>
         </div>
       </div>

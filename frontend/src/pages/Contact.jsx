@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -10,6 +10,8 @@ import { MapPin, Mail, Youtube, Phone } from "lucide-react";
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
   const [sending, setSending] = useState(false);
+  const [info, setInfo] = useState(null);
+  useEffect(() => { api.get("/site-content/contact").then(r => setInfo(r.data?.value)).catch(() => {}); }, []);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   const submit = async (e) => {
@@ -58,15 +60,16 @@ export default function Contact() {
           <Card className="p-6 rounded-3xl">
             <h2 className="text-2xl font-bold text-primary">विद्यालय का पता</h2>
             <ul className="mt-4 space-y-3 text-sm">
-              <li className="flex items-start gap-3"><MapPin className="h-5 w-5 mt-0.5 text-secondary"/><span>कस्तूरबा गांधी बालिका विद्यालय, गोड्डा, झारखंड</span></li>
-              <li className="flex items-center gap-3"><Mail className="h-5 w-5 text-secondary"/><a href="mailto:kgabvgodda@gmail.com" className="hover:underline">kgabvgodda@gmail.com</a></li>
-              <li className="flex items-center gap-3"><Youtube className="h-5 w-5 text-secondary"/><a href="https://www.youtube.com/@kgbvgodda" target="_blank" rel="noreferrer" className="hover:underline">YouTube: @kgbvgodda</a></li>
+              <li className="flex items-start gap-3"><MapPin className="h-5 w-5 mt-0.5 text-secondary"/><span>{info?.address || "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा, झारखंड"}</span></li>
+              <li className="flex items-center gap-3"><Mail className="h-5 w-5 text-secondary"/><a href={`mailto:${info?.email || "kgabvgodda@gmail.com"}`} className="hover:underline">{info?.email || "kgabvgodda@gmail.com"}</a></li>
+              {info?.phone && <li className="flex items-center gap-3"><Phone className="h-5 w-5 text-secondary"/><a href={`tel:${info.phone}`} className="hover:underline">{info.phone}</a></li>}
+              {info?.youtube && <li className="flex items-center gap-3"><Youtube className="h-5 w-5 text-secondary"/><a href={info.youtube} target="_blank" rel="noreferrer" className="hover:underline">YouTube</a></li>}
             </ul>
           </Card>
           <Card className="rounded-3xl overflow-hidden">
             <iframe
               title="school-location"
-              src="https://maps.google.com/maps?q=24.795789,87.299783&z=15&output=embed"
+              src={`https://maps.google.com/maps?q=${info?.map_lat ?? 24.795789},${info?.map_lng ?? 87.299783}&z=15&output=embed`}
               width="100%" height="300" style={{ border: 0 }} loading="lazy" referrerPolicy="no-referrer-when-downgrade"
             />
           </Card>

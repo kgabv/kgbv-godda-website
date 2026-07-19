@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Menu, X, Sun, Moon, Search, ChevronDown } from "lucide-react";
+import { Menu, X, Sun, Moon } from "lucide-react";
 import { useTheme } from "../lib/ThemeContext";
-import { LOGO_URL } from "../lib/api";
+import { LOGO_URL, api } from "../lib/api";
 import { Button } from "./ui/button";
 
 const NAV = [
@@ -12,8 +12,10 @@ const NAV = [
   { to: "/academics", label: "शिक्षा" },
   { to: "/admission", label: "प्रवेश" },
   { to: "/facilities", label: "सुविधाएँ" },
+  { to: "/hostel", label: "छात्रावास" },
+  { to: "/staff", label: "शिक्षक" },
   { to: "/activities", label: "गतिविधियाँ" },
-  { to: "/gallery", label: "फोटो गैलरी" },
+  { to: "/gallery", label: "गैलरी" },
   { to: "/videos", label: "वीडियो" },
   { to: "/news", label: "समाचार" },
   { to: "/downloads", label: "डाउनलोड" },
@@ -24,6 +26,8 @@ export default function Header() {
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [brand, setBrand] = useState(null);
+  const [contact, setContact] = useState(null);
   const location = useLocation();
 
   useEffect(() => setOpen(false), [location.pathname]);
@@ -32,6 +36,16 @@ export default function Header() {
     window.addEventListener("scroll", on);
     return () => window.removeEventListener("scroll", on);
   }, []);
+  useEffect(() => {
+    api.get("/site-content/branding").then(r => setBrand(r.data?.value)).catch(() => {});
+    api.get("/site-content/contact").then(r => setContact(r.data?.value)).catch(() => {});
+  }, []);
+
+  const logo = brand?.logo_url || LOGO_URL;
+  const name = brand?.school_name || "कस्तूरबा गांधी बालिका विद्यालय";
+  const subName = brand?.school_name_short || "गोड्डा, झारखंड · शिक्षा · संस्कार · आत्मनिर्भरता";
+  const tagline = brand?.tagline || "";
+  const email = contact?.email || "kgabvgodda@gmail.com";
 
   return (
     <header
@@ -42,16 +56,16 @@ export default function Header() {
       <div className="bg-primary text-primary-foreground text-xs md:text-sm">
         <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between">
           <span>झारखंड शिक्षा विभाग | पूर्ण आवासीय बालिका विद्यालय</span>
-          <span className="hidden md:inline">📧 kgabvgodda@gmail.com</span>
+          <span className="hidden md:inline">📧 {email}</span>
         </div>
       </div>
       <div className={`glass ${scrolled ? "py-2" : "py-3"} smooth-color`}>
         <div className="max-w-7xl mx-auto px-4 flex items-center gap-3">
           <Link to="/" className="flex items-center gap-3" data-testid="nav-logo">
-            <img src={LOGO_URL} alt="KGBV Godda Logo" className="h-14 w-14 rounded-full object-cover ring-2 ring-primary/20" />
+            <img src={logo} alt="Logo" className="h-14 w-14 rounded-full object-cover ring-2 ring-primary/20" />
             <div className="leading-tight">
-              <div className="text-primary font-extrabold text-base md:text-xl">कस्तूरबा गांधी बालिका विद्यालय</div>
-              <div className="text-xs md:text-sm text-muted-foreground">गोड्डा, झारखंड · शिक्षा · संस्कार · आत्मनिर्भरता</div>
+              <div className="text-primary font-extrabold text-base md:text-xl">{name}</div>
+              <div className="text-xs md:text-sm text-muted-foreground">{subName}{tagline ? ` · ${tagline}` : ""}</div>
             </div>
           </Link>
           <div className="ml-auto flex items-center gap-2">
