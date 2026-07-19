@@ -1,56 +1,66 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import React from "react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { Toaster } from "sonner";
+import { ThemeProvider } from "./lib/ThemeContext";
+import { AuthProvider } from "./lib/AuthContext";
+import Layout from "./components/Layout";
+import AuthCallback from "./components/AuthCallback";
+import Home from "./pages/Home";
+import About from "./pages/About";
+import Principal from "./pages/Principal";
+import Academics from "./pages/Academics";
+import Admission from "./pages/Admission";
+import Facilities from "./pages/Facilities";
+import Activities from "./pages/Activities";
+import Gallery from "./pages/Gallery";
+import VideoGallery from "./pages/VideoGallery";
+import News from "./pages/News";
+import Downloads from "./pages/Downloads";
+import Contact from "./pages/Contact";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
+import { Privacy, Terms } from "./pages/Legal";
+import "./App.css";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
+function AppRouter() {
+  const location = useLocation();
+  // Handle OAuth callback fragment synchronously
+  if (location.hash?.includes("session_id=")) {
+    return <AuthCallback />;
+  }
   return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
-
-function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/principal" element={<Principal />} />
+        <Route path="/academics" element={<Academics />} />
+        <Route path="/admission" element={<Admission />} />
+        <Route path="/facilities" element={<Facilities />} />
+        <Route path="/activities" element={<Activities />} />
+        <Route path="/gallery" element={<Gallery />} />
+        <Route path="/videos" element={<VideoGallery />} />
+        <Route path="/news" element={<News />} />
+        <Route path="/downloads" element={<Downloads />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+      </Route>
+    </Routes>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRouter />
+          <Toaster richColors position="top-right" />
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}
