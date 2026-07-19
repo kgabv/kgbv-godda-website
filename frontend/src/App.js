@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "./lib/ThemeContext";
 import { AuthProvider } from "./lib/AuthContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
 import AuthCallback from "./components/AuthCallback";
 import Home from "./pages/Home";
@@ -25,7 +26,7 @@ import "./App.css";
 function AppRouter() {
   const location = useLocation();
   // Handle OAuth callback fragment synchronously
-  if (location.hash?.includes("session_id=")) {
+  if (typeof window !== "undefined" && (location.hash || window.location.hash || "").includes("session_id=")) {
     return <AuthCallback />;
   }
   return (
@@ -47,6 +48,7 @@ function AppRouter() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="*" element={<Home />} />
       </Route>
     </Routes>
   );
@@ -54,13 +56,15 @@ function AppRouter() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRouter />
-          <Toaster richColors position="top-right" />
-        </BrowserRouter>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRouter />
+            <Toaster richColors position="top-right" />
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
