@@ -15,9 +15,16 @@ export const api = axios.create({
   timeout: 15000,
 });
 
-// Suppress noisy console errors — components already handle failures gracefully
+// Guard against HTML responses (e.g., Vercel SPA fallback catches /api/*)
+// If content-type is not JSON, treat as failure so caller uses fallback.
 api.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    const ct = (r.headers?.["content-type"] || "").toLowerCase();
+    if (ct && !ct.includes("application/json") && typeof r.data === "string") {
+      return Promise.reject(new Error("Non-JSON API response (backend not reachable)"));
+    }
+    return r;
+  },
   (err) => {
     if (process.env.NODE_ENV !== "production") {
       console.warn("API error:", err?.config?.url, err?.message);
@@ -25,5 +32,8 @@ api.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+// Helper: safe array extraction
+export const asArray = (x) => (Array.isArray(x) ? x : []);
 
 export const LOGO_URL = "https://customer-assets-wrfwihn1.emergentagent.net/job_e3f9b288-4ca0-4b1b-858c-48bc26649331/artifacts/7brhlrkg_IMG_20260704_154418.png";

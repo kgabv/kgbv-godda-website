@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { api } from "../lib/api";
+import { api, asArray } from "../lib/api";
 import Lightbox from "../components/Lightbox";
 import { motion } from "framer-motion";
 import { Search } from "lucide-react";
@@ -12,9 +12,9 @@ export default function Gallery() {
   const [q, setQ] = useState("");
   const [box, setBox] = useState(null);
 
-  useEffect(() => { api.get("/gallery").then((r) => setItems(r.data)); }, []);
+  useEffect(() => { api.get("/gallery").then((r) => setItems(asArray(r.data))).catch(() => setItems([])); }, []);
 
-  const filtered = useMemo(() => items.filter(i =>
+  const filtered = useMemo(() => asArray(items).filter(i =>
     (cat === "All" || i.category === cat) &&
     (i.title.toLowerCase().includes(q.toLowerCase()) || (i.caption || "").toLowerCase().includes(q.toLowerCase()))
   ), [items, cat, q]);

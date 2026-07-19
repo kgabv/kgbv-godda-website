@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, asArray } from "../lib/api";
 import { Card } from "../components/ui/card";
 import { Bell, Calendar } from "lucide-react";
 
 export default function News() {
   const [items, setItems] = useState([]);
-  useEffect(() => { api.get("/notices?active_only=false").then((r) => setItems(r.data)); }, []);
+  useEffect(() => { api.get("/notices?active_only=false").then((r) => setItems(asArray(r.data))).catch(() => setItems([])); }, []);
   return (
     <div className="max-w-5xl mx-auto px-4 py-12" data-testid="news-page">
       <h1 className="text-4xl md:text-5xl font-extrabold text-primary">समाचार एवं सूचनाएँ</h1>

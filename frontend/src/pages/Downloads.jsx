@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { api, API } from "../lib/api";
+import { api, API, asArray } from "../lib/api";
 import { Card } from "../components/ui/card";
 import { FileDown, FileText } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 export default function Downloads() {
   const [items, setItems] = useState([]);
-  useEffect(() => { api.get("/downloads").then((r) => setItems(r.data)); }, []);
+  useEffect(() => { api.get("/downloads").then((r) => setItems(asArray(r.data))).catch(() => setItems([])); }, []);
   return (
     <div className="max-w-5xl mx-auto px-4 py-12" data-testid="downloads-page">
       <h1 className="text-4xl md:text-5xl font-extrabold text-primary">डाउनलोड</h1>

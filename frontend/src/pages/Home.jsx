@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { GraduationCap, Home as HomeIcon, ShieldCheck, Utensils, Wifi, BookOpen, FlaskConical, Cpu, Camera, Users, Trophy, Sparkles, ArrowRight } from "lucide-react";
-import { api, LOGO_URL } from "../lib/api";
+import { api, LOGO_URL, asArray } from "../lib/api";
 import AnimatedCounter from "../components/AnimatedCounter";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -29,7 +29,7 @@ export default function Home() {
   useEffect(() => {
     api.get("/site-content/hero").then((r) => setHero(r.data.value)).catch(() => {});
     api.get("/site-content/about").then((r) => setAbout(r.data.value)).catch(() => {});
-    api.get("/gallery").then((r) => setGallery(r.data.slice(0, 6))).catch(() => {});
+    api.get("/gallery").then((r) => setGallery(asArray(r.data).slice(0, 6))).catch(() => setGallery([]));
   }, []);
 
   return (
@@ -124,7 +124,7 @@ export default function Home() {
           <Link to="/gallery"><Button variant="ghost" className="rounded-full">पूरी गैलरी <ArrowRight className="h-4 w-4 ml-1"/></Button></Link>
         </div>
         <div className="mt-8 grid grid-cols-2 md:grid-cols-3 gap-3">
-          {gallery.map((g, i) => (
+          {asArray(gallery).map((g, i) => (
             <motion.img
               key={g.id}
               src={g.image_url}

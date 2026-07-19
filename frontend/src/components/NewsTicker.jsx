@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 export default function NewsTicker() {
   const [items, setItems] = useState([]);
   useEffect(() => {
-    api.get("/notices").then((r) => setItems(r.data)).catch(() => {});
+    api.get("/notices").then((r) => setItems(Array.isArray(r.data) ? r.data : [])).catch(() => setItems([]));
   }, []);
   const text = items.length ? items : [{ id: "x", title: "स्वागत है — कस्तूरबा गांधी बालिका विद्यालय, गोड्डा" }];
   return (

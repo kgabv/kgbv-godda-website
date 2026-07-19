@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, asArray } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -58,7 +58,7 @@ export default function AdminDashboard() {
 function NoticesTab() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ title: "", body: "", priority: "normal" });
-  const load = () => api.get("/notices?active_only=false").then((r) => setItems(r.data));
+  const load = () => api.get("/notices?active_only=false").then((r) => setItems(asArray(r.data))).catch(() => setItems([]));
   useEffect(() => { load(); }, []);
   const add = async () => {
     if (!form.title) return toast.error("शीर्षक आवश्यक");
@@ -122,7 +122,7 @@ function UploadInput({ onUploaded, testId }) {
 function GalleryTab() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ title: "", category: "Campus", image_url: "", caption: "" });
-  const load = () => api.get("/gallery").then((r) => setItems(r.data));
+  const load = () => api.get("/gallery").then((r) => setItems(asArray(r.data))).catch(() => setItems([]));
   useEffect(() => { load(); }, []);
   const add = async () => {
     if (!form.title || !form.image_url) return toast.error("शीर्षक व चित्र आवश्यक");
@@ -167,7 +167,7 @@ function GalleryTab() {
 function VideosTab() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ title: "", youtube_id: "", description: "", category: "General" });
-  const load = () => api.get("/videos").then((r) => setItems(r.data));
+  const load = () => api.get("/videos").then((r) => setItems(asArray(r.data))).catch(() => setItems([]));
   useEffect(() => { load(); }, []);
   const parseId = (v) => {
     const m = v.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
@@ -205,7 +205,7 @@ function VideosTab() {
 function DownloadsTab() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ title: "", file_url: "", description: "", category: "General" });
-  const load = () => api.get("/downloads").then((r) => setItems(r.data));
+  const load = () => api.get("/downloads").then((r) => setItems(asArray(r.data))).catch(() => setItems([]));
   useEffect(() => { load(); }, []);
   const add = async () => {
     if (!form.title || !form.file_url) return toast.error("शीर्षक व फ़ाइल आवश्यक");
@@ -282,7 +282,7 @@ function ContentTab() {
 
 function MessagesTab() {
   const [items, setItems] = useState([]);
-  useEffect(() => { api.get("/contact").then(r => setItems(r.data)).catch(() => {}); }, []);
+  useEffect(() => { api.get("/contact").then(r => setItems(asArray(r.data))).catch(() => setItems([])); }, []);
   return (
     <div className="grid gap-3">
       {items.map(m => (

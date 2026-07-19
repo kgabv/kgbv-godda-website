@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, asArray } from "../lib/api";
 import { Card } from "../components/ui/card";
 
 export default function VideoGallery() {
   const [videos, setVideos] = useState([]);
-  useEffect(() => { api.get("/videos").then((r) => setVideos(r.data)); }, []);
+  useEffect(() => { api.get("/videos").then((r) => setVideos(asArray(r.data))).catch(() => setVideos([])); }, []);
   return (
     <div className="max-w-7xl mx-auto px-4 py-12" data-testid="videos-page">
       <h1 className="text-4xl md:text-5xl font-extrabold text-primary">वीडियो गैलरी</h1>
