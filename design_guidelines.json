@@ -1,0 +1,113 @@
+{
+  "theme": {
+    "light": {
+      "background": "#F8FAFC",
+      "foreground": "#0F172A",
+      "primary": "#0056B3",
+      "secondary": "#00A3E0",
+      "accent": "#FF9933",
+      "card": "#FFFFFF",
+      "border": "#E2E8F0"
+    },
+    "dark": {
+      "background": "#0F172A",
+      "foreground": "#F8FAFC",
+      "primary": "#3B82F6",
+      "secondary": "#7DD3FC",
+      "accent": "#FBBF24",
+      "card": "#1E293B",
+      "border": "#334155"
+    }
+  },
+  "typography": {
+    "headings": "Mukta, sans-serif",
+    "body": "Hind, Noto Sans Devanagari, sans-serif",
+    "rules": "Use font weights 700/800 for headings. Hindi text needs slightly more line-height (leading-relaxed or leading-loose) due to matras. Keep tracking tight for large headings."
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Use backdrop-blur-xl with slightly transparent backgrounds (e.g., bg-white/70 in light, bg-slate-900/60 in dark). Never use full transparency.",
+    "shadows": "Soft layered ambient shadows for cards. Use drop-shadow for text overlaid on images.",
+    "borders": "1px subtle borders on cards to ground them (e.g., border-slate-200 in light, border-slate-700 in dark)."
+  },
+  "layouts": {
+    "grids": "Use Bento grid for Facilities (mode A) and Galleries. Asymmetrical grids for About sections.",
+    "spacing": "Generous spacing philosophy. Use p-8 to p-12 for section paddings. Ensure enough breathing room around Hindi text."
+  },
+  "components": {
+    "Hero": "Full width image or carousel with dark overlay (bg-blue-900/40) for text legibility. Large typography for the Hindi tagline 'शिक्षा • संस्कार • आत्मनिर्भरता'.",
+    "Ticker": "Auto-scrolling news ticker for latest notices. Use framer-motion or CSS marquee, minimal aesthetic (not flashy red).",
+    "Cards": "Rounded corners (rounded-2xl). Use 'Crystal Glass' variant or clean flat design with hover translate-y-1 and shadow-lg.",
+    "Navigation": "Sticky header with glassmorphism. Hamburger on mobile, full links on desktop.",
+    "AdminDashboard": "High density grid, sharp edges or max 8px border-radius, minimal shadows. Side navigation. Use Shadcn components heavily.",
+    "Counters": "Animated counters for Students, Teachers, Awards using framer-motion.",
+    "Floating_Buttons": "WhatsApp floating button and Scroll-to-top button fixed at the bottom right."
+  },
+  "image_urls": {
+    "Logo": [
+      {
+        "url": "https://customer-assets-wrfwihn1.emergentagent.net/job_e3f9b288-4ca0-4b1b-858c-48bc26649331/artifacts/7brhlrkg_IMG_20260704_154418.png",
+        "description": "KGBV Godda Logo",
+        "category": "logo"
+      }
+    ],
+    "Academics_Classroom": [
+      {
+        "url": "https://images.unsplash.com/photo-1573894998033-c0cef4ed722b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHw0fHxpbmRpYW4lMjBzY2hvb2wlMjBnaXJscyUyMHN0dWR5aW5nJTIwY2xhc3Nyb29tfGVufDB8fHx8MTc4NDQ0OTE5N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Girls studying in classroom",
+        "category": "academics"
+      },
+      {
+        "url": "https://images.unsplash.com/flagged/photo-1574097656146-0b43b7660cb6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBzY2hvb2wlMjBnaXJscyUyMHN0dWR5aW5nJTIwY2xhc3Nyb29tfGVufDB8fHx8MTc4NDQ0OTE5N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Girl studying focus",
+        "category": "hero"
+      }
+    ],
+    "Facilities_Labs_Library": [
+      {
+        "url": "https://images.pexels.com/photos/33745700/pexels-photo-33745700.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Students in modern library",
+        "category": "facilities"
+      },
+      {
+        "url": "https://images.pexels.com/photos/35551010/pexels-photo-35551010.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Children learning geography with globe",
+        "category": "facilities"
+      }
+    ],
+    "Activities_Sports_Yoga": [
+      {
+        "url": "https://images.unsplash.com/photo-1525088068454-ff2c453e50e9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjBnaXJscyUyMHBsYXlpbmclMjBzcG9ydHMlMjBvdXRkb29yfGVufDB8fHx8MTc4NDQ0OTE5N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Girls playing soccer",
+        "category": "activities"
+      },
+      {
+        "url": "https://images.pexels.com/photos/7351720/pexels-photo-7351720.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Girl playing badminton",
+        "category": "activities"
+      },
+      {
+        "url": "https://images.pexels.com/photos/34058359/pexels-photo-34058359.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Yoga practice outdoors",
+        "category": "activities"
+      }
+    ],
+    "Principal": [
+      {
+        "url": "https://images.pexels.com/photos/37586859/pexels-photo-37586859.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Portrait of female principal",
+        "category": "about"
+      }
+    ],
+    "Campus": [
+      {
+        "url": "https://images.unsplash.com/photo-1709817243586-6ddd4e6822c1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBzY2hvb2wlMjBsaWJyYXJ5fGVufDB8fHx8MTc4NDQ0OTE5N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "School campus courtyard",
+        "category": "hero"
+      }
+    ]
+  },
+  "motion": "Use Framer Motion for scroll-triggered fades and slide-ups. Use staggered entrance animations for grid items. Apply scale micro-interactions on interactive elements.",
+  "accessibility": "Ensure high contrast for text. Hindi fonts must be legible (min 16px). Use aria-labels, alt texts for images, and support standard keyboard navigation.",
+  "instructions_to_main_agent": "Ensure website language is completely in Hindi. The color theme must be Blue, Sky Blue, and White (Dark/Light mode supported). Implement the Admin Dashboard using Shadcn for form inputs, datatables, and dialogs. Add the Google Maps iframe for coordinates 24.795789, 87.299783. Add specific UI features like Image Lightbox, Animated Counters, Auto-scrolling News Ticker, and Floating WhatsApp/Scroll-to-Top buttons.",
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": "1. Do not use generic centered layouts or simplistic gradients. 2. Create depth using z-index and shadows. 3. Use glass-morphism effects with backdrop-blur. 4. Exclude transforms from universal transitions (transition: all is banned). 5. Optically left-align text for better readability. 6. Do not use AI assistant emoji icons. 7. Ensure Sonner toast is used for notifications. 8. Add `data-testid` to all interactive elements."
+}
