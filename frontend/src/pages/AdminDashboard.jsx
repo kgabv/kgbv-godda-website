@@ -107,7 +107,7 @@ function SectionForm({ title, initial, onSave, fields, testId }) {
   const [v, setV] = useState(initial);
   useEffect(() => setV(initial), [initial]);
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
+  const set = (k, isNumber) => (e) => setV({ ...v, [k]: isNumber ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value });
   const save = async () => {
     setSaving(true);
     try { await onSave(v); toast.success("सहेजा गया"); }
@@ -122,20 +122,20 @@ function SectionForm({ title, initial, onSave, fields, testId }) {
           <div key={f.key}>
             <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
             {f.type === "textarea" ? (
-              <Textarea rows={f.rows || 3} value={v[f.key] ?? ""} onChange={set(f.key)} data-testid={`${testId}-${f.key}`}/>
+              <Textarea rows={f.rows || 3} value={v[f.key] ?? ""} onChange={set(f.key, false)} data-testid={`${testId}-${f.key}`}/>
             ) : f.type === "image" ? (
               <div className="flex items-center gap-3">
-                <Input value={v[f.key] ?? ""} onChange={set(f.key)} placeholder="URL या अपलोड करें" data-testid={`${testId}-${f.key}`}/>
+                <Input value={v[f.key] ?? ""} onChange={set(f.key, false)} placeholder="URL या अपलोड करें" data-testid={`${testId}-${f.key}`}/>
                 <UploadInput testId={`${testId}-${f.key}-upload`} onUploaded={(d) => setV(x => ({ ...x, [f.key]: d.absolute_url }))}/>
                 {v[f.key] && <img src={v[f.key]} alt="" className="h-10 w-10 rounded object-cover"/>}
               </div>
             ) : f.type === "color" ? (
               <div className="flex items-center gap-2">
-                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(v[f.key] || "") ? v[f.key] : "#0056B3"} onChange={set(f.key)} className="h-10 w-14 rounded border border-border bg-transparent cursor-pointer" data-testid={`${testId}-${f.key}-picker`}/>
-                <Input value={v[f.key] ?? ""} onChange={set(f.key)} placeholder="#RRGGBB" data-testid={`${testId}-${f.key}`}/>
+                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(v[f.key] || "") ? v[f.key] : "#0056B3"} onChange={set(f.key, false)} className="h-10 w-14 rounded border border-border bg-transparent cursor-pointer" data-testid={`${testId}-${f.key}-picker`}/>
+                <Input value={v[f.key] ?? ""} onChange={set(f.key, false)} placeholder="#RRGGBB" data-testid={`${testId}-${f.key}`}/>
               </div>
             ) : (
-              <Input type={f.type || "text"} value={v[f.key] ?? ""} onChange={set(f.key)} data-testid={`${testId}-${f.key}`}/>
+              <Input type={f.type || "text"} value={v[f.key] ?? ""} onChange={set(f.key, f.type === "number")} data-testid={`${testId}-${f.key}`}/>
             )}
           </div>
         ))}
@@ -161,6 +161,10 @@ function ContentTab() {
   const save = (key) => async (v) => {
     await api.put("/site-content", { key, value: v });
     setData(d => ({ ...d, [key]: v }));
+    // Live-apply theme changes without full reload
+    if (key === "theme") {
+      window.dispatchEvent(new CustomEvent("kgbv-theme-changed", { detail: v }));
+    }
   };
 
   const sections = [

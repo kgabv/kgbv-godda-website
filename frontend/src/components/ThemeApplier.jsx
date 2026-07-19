@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import { api } from "../lib/api";
 
 // Convert hex color (#RRGGBB) to CSS "H S% L%" (no wrapper hsl()).
@@ -31,17 +31,25 @@ const MAP = {
   background: "--background",
 };
 
+function apply(t) {
+  if (!t) return;
+  const root = document.documentElement;
+  Object.entries(MAP).forEach(([k, cssVar]) => {
+    const parts = hexToHslParts(t[k]);
+    if (parts) root.style.setProperty(cssVar, parts);
+  });
+}
+
 export default function ThemeApplier() {
-  useEffect(() => {
-    api.get("/site-content/theme").then((r) => {
-      const t = r.data?.value;
-      if (!t) return;
-      const root = document.documentElement;
-      Object.entries(MAP).forEach(([k, cssVar]) => {
-        const parts = hexToHslParts(t[k]);
-        if (parts) root.style.setProperty(cssVar, parts);
-      });
-    }).catch(() => {});
+  const fetchAndApply = useCallback(() => {
+    api.get("/site-content/theme").then((r) => apply(r.data?.value)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchAndApply();
+    const onChange = (e) => apply(e.detail);
+    window.addEventListener("kgbv-theme-changed", onChange);
+    return () => window.removeEventListener("kgbv-theme-changed", onChange);
+  }, [fetchAndApply]);
   return null;
 }

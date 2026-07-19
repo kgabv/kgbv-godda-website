@@ -38,3 +38,4 @@ dist/
 # Test reports
 test_reports/
 frontend/node_modules/.cache/default-development/14.pack
+frontend/node_modules/.cache/default-development/1.pack
