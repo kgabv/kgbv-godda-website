@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, asArray, API } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
@@ -98,8 +98,12 @@ function UploadInput({ onUploaded, testId }) {
 
 function useList(path) {
   const [items, setItems] = useState([]);
-  const load = () => api.get(path).then((r) => setItems(asArray(r.data))).catch(() => setItems([]));
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  const load = useCallback(() => {
+    api.get(path).then((r) => setItems(asArray(r.data))).catch(() => setItems([]));
+  }, [path]);
+  useEffect(() => {
+    load();
+  }, [load]);
   return [items, load];
 }
 
