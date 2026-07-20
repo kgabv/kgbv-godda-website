@@ -83,7 +83,10 @@ function UploadInput({ onUploaded, testId }) {
       const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
       const abs = data.url.startsWith("http") ? data.url : `${API.replace(/\/api$/, "")}${data.url}`;
       onUploaded({ ...data, absolute_url: abs });
-    } catch { toast.error("अपलोड असफल"); }
+    } catch (err) {
+      const errMsg = err?.response?.data?.detail || err?.response?.data?.message || err?.message || "अपलोड असफल";
+      toast.error(`अपलोड असफल: ${errMsg}`);
+    }
     finally { setBusy(false); e.target.value = ""; }
   };
   return (
@@ -114,8 +117,14 @@ function SectionForm({ title, initial, onSave, fields, testId }) {
   const set = (k, isNumber) => (e) => setV({ ...v, [k]: isNumber ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value });
   const save = async () => {
     setSaving(true);
-    try { await onSave(v); toast.success("सहेजा गया"); }
-    catch { toast.error("त्रुटि"); }
+    try {
+      await onSave(v);
+      toast.success("सहेजा गया");
+    }
+    catch (err) {
+      const errMsg = err?.response?.data?.detail || err?.response?.data?.message || err?.message || "त्रुटि";
+      toast.error(`त्रुटि: ${errMsg}`);
+    }
     finally { setSaving(false); }
   };
   return (

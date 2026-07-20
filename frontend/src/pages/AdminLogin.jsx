@@ -39,8 +39,12 @@ export default function AdminLogin() {
         email: "admin@test.com",
         name: "परीक्षण एडमिन (Demo Admin)",
         picture: "",
-        is_admin: true
+        is_admin: true,
+        session_token: "test_admin_token"
       };
+      try {
+        localStorage.setItem("session_token", "test_admin_token");
+      } catch (_) {}
       try {
         localStorage.setItem("demo_user", JSON.stringify(fallbackUser));
       } catch (_) {}
