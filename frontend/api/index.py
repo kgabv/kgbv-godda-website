@@ -638,6 +638,35 @@ async def stats():
 async def root():
     return {"message": "KGBV Godda API"}
 
+@api_router.get("/db-status")
+async def db_status():
+    global db_is_mock, mongo_url, db_name
+    url_redacted = mongo_url
+    if "@" in mongo_url:
+        parts = mongo_url.split("@")
+        prefix = parts[0].split("://")
+        scheme = prefix[0]
+        url_redacted = f"{scheme}://****:****@{parts[1]}"
+    
+    collections = []
+    ping_ok = False
+    try:
+        await client.admin.command('ping')
+        ping_ok = True
+        collections = await db.list_collection_names()
+    except Exception as e:
+        ping_ok = False
+        collections = str(e)
+
+    return {
+        "db_is_mock": db_is_mock,
+        "mongo_url": url_redacted,
+        "db_name": db_name,
+        "ping_ok": ping_ok,
+        "collections": collections,
+        "env_mongo_url": os.environ.get('MONGO_URL', 'NOT_SET')[:30] + '...' if os.environ.get('MONGO_URL') else 'NOT_SET'
+    }
+
 # ---------- Seed ----------
 async def seed():
     # Default site content
