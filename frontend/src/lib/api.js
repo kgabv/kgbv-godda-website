@@ -5,7 +5,7 @@ import axios from "axios";
 // 2. Otherwise use "" — axios treats "" as same-origin relative, so /api/... hits
 //    the current host. This works if backend is served from the same domain (Emergent),
 //    and gracefully fails on Vercel (frontend-only) without crashing the app.
-const RAW = process.env.REACT_APP_BACKEND_URL || "";
+const RAW = process.env.REACT_APP_BACKEND_URL || "https://ais-dev-g66bpjjmr55dez7hxlr3hx-135943751726.asia-southeast1.run.app";
 export const BACKEND_URL = RAW.replace(/\/$/, "");
 export const API = `${BACKEND_URL}/api`;
 
