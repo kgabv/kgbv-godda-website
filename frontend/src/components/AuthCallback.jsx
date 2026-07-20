@@ -20,6 +20,13 @@ export default function AuthCallback() {
     (async () => {
       try {
         const { data } = await api.post("/auth/session", { session_id: sid });
+        if (data.session_token) {
+          try {
+            localStorage.setItem("session_token", data.session_token);
+          } catch (e) {
+            console.error("Failed to save session_token to localStorage", e);
+          }
+        }
         setUser(data);
         navigate("/admin", { replace: true, state: { user: data } });
       } catch (e) {

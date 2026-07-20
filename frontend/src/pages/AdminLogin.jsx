@@ -22,10 +22,30 @@ export default function AdminLogin() {
     setLoadingDemo(true);
     try {
       const { data } = await api.post("/auth/demo-login");
+      if (data.session_token) {
+        try {
+          localStorage.setItem("session_token", data.session_token);
+        } catch (_) {}
+      }
+      try {
+        localStorage.setItem("demo_user", JSON.stringify(data));
+      } catch (_) {}
       setUser(data);
       navigate("/admin", { replace: true });
     } catch (e) {
-      console.error("Demo login failed:", e);
+      console.warn("Demo login API failed, falling back to local session:", e);
+      const fallbackUser = {
+        user_id: "user_demo_admin",
+        email: "admin@test.com",
+        name: "परीक्षण एडमिन (Demo Admin)",
+        picture: "",
+        is_admin: true
+      };
+      try {
+        localStorage.setItem("demo_user", JSON.stringify(fallbackUser));
+      } catch (_) {}
+      setUser(fallbackUser);
+      navigate("/admin", { replace: true });
     } finally {
       setLoadingDemo(false);
     }

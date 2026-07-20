@@ -15,6 +15,22 @@ export const api = axios.create({
   timeout: 15000,
 });
 
+// Attach authorization header from localStorage if present
+api.interceptors.request.use(
+  (config) => {
+    try {
+      const token = localStorage.getItem("session_token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (e) {
+      console.warn("localStorage not accessible", e);
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Guard against HTML responses (e.g., Vercel SPA fallback catches /api/*)
 // If content-type is not JSON, treat as failure so caller uses fallback.
 api.interceptors.response.use(

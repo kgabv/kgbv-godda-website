@@ -239,7 +239,7 @@ async def auth_session(payload: SessionRequest, response: Response):
         key="session_token", value=session_token, max_age=7*24*60*60,
         httponly=True, secure=True, samesite="none", path="/",
     )
-    return {"user_id": user_id, "email": email, "name": name, "picture": picture, "is_admin": bool(is_admin)}
+    return {"user_id": user_id, "email": email, "name": name, "picture": picture, "is_admin": bool(is_admin), "session_token": session_token}
 
 @api_router.post("/auth/demo-login")
 async def auth_demo_login(response: Response):
@@ -283,7 +283,7 @@ async def auth_demo_login(response: Response):
         key="session_token", value=session_token, max_age=7*24*60*60,
         httponly=True, secure=True, samesite="none", path="/",
     )
-    return {"user_id": user_id, "email": email, "name": name, "picture": picture, "is_admin": is_admin}
+    return {"user_id": user_id, "email": email, "name": name, "picture": picture, "is_admin": is_admin, "session_token": session_token}
 
 @api_router.get("/auth/me")
 async def auth_me(request: Request):
