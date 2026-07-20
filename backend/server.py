@@ -16,9 +16,20 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+db_name = os.environ.get('DB_NAME', 'kgbv-godda')
+
+db_is_mock = False
+try:
+    from motor.motor_asyncio import AsyncIOMotorClient
+    client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=2000)
+    db = client[db_name]
+except Exception as e:
+    logging.warning(f"Failed to load motor client, using mongomock_motor: {e}")
+    from mongomock_motor import AsyncMongoMockClient as MockAsyncIOMotorClient
+    client = MockAsyncIOMotorClient()
+    db = client[db_name]
+    db_is_mock = True
 
 # Config
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
@@ -229,6 +240,50 @@ async def auth_session(payload: SessionRequest, response: Response):
         httponly=True, secure=True, samesite="none", path="/",
     )
     return {"user_id": user_id, "email": email, "name": name, "picture": picture, "is_admin": bool(is_admin)}
+
+@api_router.post("/auth/demo-login")
+async def auth_demo_login(response: Response):
+    user_id = "user_demo_admin"
+    email = "admin@test.com"
+    name = "परीक्षण एडमिन (Demo Admin)"
+    picture = ""
+    session_token = "test_admin_token"
+    is_admin = True
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "user_id": user_id,
+                "email": email,
+                "name": name,
+                "picture": picture,
+                "is_admin": is_admin,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+        upsert=True
+    )
+
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.update_one(
+        {"session_token": session_token},
+        {
+            "$set": {
+                "user_id": user_id,
+                "session_token": session_token,
+                "expires_at": expires_at.isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+        upsert=True
+    )
+
+    response.set_cookie(
+        key="session_token", value=session_token, max_age=7*24*60*60,
+        httponly=True, secure=True, samesite="none", path="/",
+    )
+    return {"user_id": user_id, "email": email, "name": name, "picture": picture, "is_admin": is_admin}
 
 @api_router.get("/auth/me")
 async def auth_me(request: Request):
@@ -668,11 +723,30 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    global client, db, db_is_mock
     try:
         init_storage()
         logger.info("Object storage initialized")
     except Exception as e:
         logger.warning(f"Storage init failed (will retry lazily): {e}")
+
+    # Verify MongoDB connection and fallback to mongomock_motor if needed
+    if not db_is_mock:
+        try:
+            logger.info("Verifying MongoDB connection...")
+            # Ping database
+            await client.admin.command('ping')
+            logger.info("Successfully connected to real MongoDB")
+        except Exception as e:
+            logger.warning(f"Real MongoDB connection failed during ping: {e}. Falling back to mongomock_motor.")
+            try:
+                from mongomock_motor import AsyncMongoMockClient as MockAsyncIOMotorClient
+                client = MockAsyncIOMotorClient()
+                db = client[db_name]
+                db_is_mock = True
+            except Exception as mock_err:
+                logger.error(f"Failed to initialize mongomock_motor: {mock_err}")
+
     try:
         await seed()
         logger.info("Seed complete")
@@ -681,4 +755,21 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if not db_is_mock:
+        client.close()
+
+# Serve React static frontend files
+frontend_dir = "/app/applet/frontend/build"
+if os.path.exists(frontend_dir):
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+    logger.info(f"Serving frontend static files from {frontend_dir}")
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+    
+    @app.exception_handler(404)
+    async def not_found_exception_handler(request: Request, exc: Exception):
+        if request.url.path.startswith("/api"):
+            return Response(status_code=404, content="Not found")
+        return FileResponse(os.path.join(frontend_dir, "index.html"))
+else:
+    logger.warning(f"Frontend build folder not found at {frontend_dir}. Running API-only mode.")

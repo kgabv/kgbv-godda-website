@@ -1,0 +1,6 @@
+{
+  "name": "KGBV Godda Website",
+  "description": "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा — झारखंड शिक्षा विभाग द्वारा संचालित पूर्ण आवासीय बालिका विद्यालय। शिक्षा, संस्कार, आत्मनिर्भरता।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
