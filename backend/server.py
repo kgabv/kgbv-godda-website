@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import json
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
@@ -94,6 +95,63 @@ def get_object(path: str):
         logger.error(f"Failed to get_object '{path}' from both local and remote: {e}")
         raise e
 
+# ---------- Persistent DB Helpers ----------
+PERSISTENT_COLLECTIONS = [
+    "site_content",
+    "notices",
+    "gallery",
+    "videos",
+    "downloads",
+    "teachers",
+    "banners",
+    "events",
+    "achievements",
+    "facilities",
+    "links",
+    "users",
+    "user_sessions",
+    "contact_messages"
+]
+
+TTL_SECONDS = 5
+last_loaded = {}
+
+async def ensure_collection_loaded(coll_name: str, force: bool = False):
+    global last_loaded
+    now = datetime.now(timezone.utc)
+    if not force and coll_name in last_loaded:
+        elapsed = (now - last_loaded[coll_name]).total_seconds()
+        if elapsed < TTL_SECONDS:
+            return
+            
+    try:
+        path = f"db_collections/{coll_name}.json"
+        content, _ = get_object(path)
+        docs = json.loads(content.decode('utf-8'))
+        
+        # Clear local db collection and reload it
+        await db[coll_name].delete_many({})
+        if docs:
+            await db[coll_name].insert_many(docs)
+        
+        last_loaded[coll_name] = now
+        logger.info(f"Loaded collection {coll_name} from persistent cloud storage ({len(docs)} docs)")
+    except Exception as e:
+        logger.warning(f"Could not load collection {coll_name} from cloud storage (using in-memory): {e}")
+        last_loaded[coll_name] = now
+
+async def persist_collection(coll_name: str):
+    global last_loaded
+    try:
+        docs = await db[coll_name].find({}, {"_id": 0}).to_list(10000)
+        content_bytes = json.dumps(docs).encode('utf-8')
+        path = f"db_collections/{coll_name}.json"
+        put_object(path, content_bytes, "application/json")
+        last_loaded[coll_name] = datetime.now(timezone.utc)
+        logger.info(f"Persisted collection {coll_name} to cloud storage ({len(docs)} docs)")
+    except Exception as e:
+        logger.error(f"Failed to persist collection {coll_name} to cloud storage: {e}")
+
 # ---------- Auth Helpers ----------
 async def get_current_user(request: Request):
     token = request.cookies.get("session_token")
@@ -103,6 +161,7 @@ async def get_current_user(request: Request):
             token = auth[7:]
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    await ensure_collection_loaded("user_sessions")
     session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
     if not session:
         if token == "test_admin_token":
@@ -138,6 +197,9 @@ async def get_current_user(request: Request):
                 },
                 upsert=True
             )
+            # Persist since we mutated demo user
+            await persist_collection("users")
+            await persist_collection("user_sessions")
             session = {
                 "user_id": user_id,
                 "session_token": token,
@@ -152,6 +214,7 @@ async def get_current_user(request: Request):
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Session expired")
+    await ensure_collection_loaded("users")
     user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
@@ -293,6 +356,9 @@ async def auth_session(payload: SessionRequest, response: Response):
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
+    await persist_collection("users")
+    await persist_collection("user_sessions")
+
     response.set_cookie(
         key="session_token", value=session_token, max_age=7*24*60*60,
         httponly=True, secure=True, samesite="none", path="/",
@@ -337,6 +403,9 @@ async def auth_demo_login(response: Response):
         upsert=True
     )
 
+    await persist_collection("users")
+    await persist_collection("user_sessions")
+
     response.set_cookie(
         key="session_token", value=session_token, max_age=7*24*60*60,
         httponly=True, secure=True, samesite="none", path="/",
@@ -353,12 +422,14 @@ async def auth_logout(request: Request, response: Response):
     token = request.cookies.get("session_token") or ""
     if token:
         await db.user_sessions.delete_one({"session_token": token})
+        await persist_collection("user_sessions")
     response.delete_cookie("session_token", path="/", samesite="none", secure=True)
     return {"ok": True}
 
 # ---------- Site Content ----------
 @api_router.get("/site-content/{key}")
 async def get_site_content(key: str):
+    await ensure_collection_loaded("site_content")
     doc = await db.site_content.find_one({"key": key}, {"_id": 0})
     if not doc:
         return {"key": key, "value": None}
@@ -372,11 +443,13 @@ async def put_site_content(payload: SiteContentIn, request: Request):
         {"$set": {"key": payload.key, "value": payload.value, "updated_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )
+    await persist_collection("site_content")
     return {"ok": True}
 
 # ---------- Notices ----------
 @api_router.get("/notices")
 async def list_notices(active_only: bool = True):
+    await ensure_collection_loaded("notices")
     q = {"is_active": True} if active_only else {}
     items = await db.notices.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
@@ -388,6 +461,7 @@ async def create_notice(payload: NoticeIn, request: Request):
     doc["id"] = str(uuid.uuid4())
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.notices.insert_one(doc)
+    await persist_collection("notices")
     doc.pop("_id", None)
     return doc
 
@@ -395,11 +469,13 @@ async def create_notice(payload: NoticeIn, request: Request):
 async def delete_notice(notice_id: str, request: Request):
     await require_admin(request)
     await db.notices.delete_one({"id": notice_id})
+    await persist_collection("notices")
     return {"ok": True}
 
 # ---------- Gallery ----------
 @api_router.get("/gallery")
 async def list_gallery(category: Optional[str] = None):
+    await ensure_collection_loaded("gallery")
     q = {} if not category or category == "All" else {"category": category}
     items = await db.gallery.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return items
@@ -411,6 +487,7 @@ async def add_gallery(payload: GalleryImageIn, request: Request):
     doc["id"] = str(uuid.uuid4())
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.gallery.insert_one(doc)
+    await persist_collection("gallery")
     doc.pop("_id", None)
     return doc
 
@@ -418,11 +495,13 @@ async def add_gallery(payload: GalleryImageIn, request: Request):
 async def delete_gallery(item_id: str, request: Request):
     await require_admin(request)
     await db.gallery.delete_one({"id": item_id})
+    await persist_collection("gallery")
     return {"ok": True}
 
 # ---------- Videos ----------
 @api_router.get("/videos")
 async def list_videos():
+    await ensure_collection_loaded("videos")
     items = await db.videos.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return items
 
@@ -433,6 +512,7 @@ async def add_video(payload: VideoIn, request: Request):
     doc["id"] = str(uuid.uuid4())
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.videos.insert_one(doc)
+    await persist_collection("videos")
     doc.pop("_id", None)
     return doc
 
@@ -440,11 +520,13 @@ async def add_video(payload: VideoIn, request: Request):
 async def delete_video(item_id: str, request: Request):
     await require_admin(request)
     await db.videos.delete_one({"id": item_id})
+    await persist_collection("videos")
     return {"ok": True}
 
 # ---------- Downloads ----------
 @api_router.get("/downloads")
 async def list_downloads():
+    await ensure_collection_loaded("downloads")
     items = await db.downloads.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return items
 
@@ -455,6 +537,7 @@ async def add_download(payload: DownloadIn, request: Request):
     doc["id"] = str(uuid.uuid4())
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.downloads.insert_one(doc)
+    await persist_collection("downloads")
     doc.pop("_id", None)
     return doc
 
@@ -462,11 +545,13 @@ async def add_download(payload: DownloadIn, request: Request):
 async def delete_download(item_id: str, request: Request):
     await require_admin(request)
     await db.downloads.delete_one({"id": item_id})
+    await persist_collection("downloads")
     return {"ok": True}
 
 # ---------- Teachers ----------
 @api_router.get("/teachers")
 async def list_teachers():
+    await ensure_collection_loaded("teachers")
     items = await db.teachers.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
 
@@ -477,6 +562,7 @@ async def add_teacher(payload: TeacherIn, request: Request):
     doc["id"] = str(uuid.uuid4())
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.teachers.insert_one(doc)
+    await persist_collection("teachers")
     doc.pop("_id", None)
     return doc
 
@@ -484,6 +570,7 @@ async def add_teacher(payload: TeacherIn, request: Request):
 async def delete_teacher(item_id: str, request: Request):
     await require_admin(request)
     await db.teachers.delete_one({"id": item_id})
+    await persist_collection("teachers")
     return {"ok": True}
 
 # ---------- Generic CRUD factory ----------
@@ -504,6 +591,7 @@ def _crud(coll: str, sort_key: str = "order", sort_dir: int = 1):
 # ---------- Banners ----------
 @api_router.get("/banners")
 async def list_banners(active_only: bool = True):
+    await ensure_collection_loaded("banners")
     q = {"is_active": True} if active_only else {}
     return await db.banners.find(q, {"_id": 0}).sort("order", 1).to_list(50)
 
@@ -512,15 +600,20 @@ async def add_banner(payload: BannerIn, request: Request):
     await require_admin(request)
     doc = payload.model_dump()
     doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
-    await db.banners.insert_one(doc); doc.pop("_id", None); return doc
+    await db.banners.insert_one(doc)
+    await persist_collection("banners")
+    doc.pop("_id", None); return doc
 
 @api_router.delete("/banners/{item_id}")
 async def delete_banner(item_id: str, request: Request):
-    await require_admin(request); await db.banners.delete_one({"id": item_id}); return {"ok": True}
+    await require_admin(request); await db.banners.delete_one({"id": item_id})
+    await persist_collection("banners")
+    return {"ok": True}
 
 # ---------- Events ----------
 @api_router.get("/events")
 async def list_events():
+    await ensure_collection_loaded("events")
     return await db.events.find({"is_active": True}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
 @api_router.post("/events")
@@ -528,15 +621,20 @@ async def add_event(payload: EventIn, request: Request):
     await require_admin(request)
     doc = payload.model_dump()
     doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
-    await db.events.insert_one(doc); doc.pop("_id", None); return doc
+    await db.events.insert_one(doc)
+    await persist_collection("events")
+    doc.pop("_id", None); return doc
 
 @api_router.delete("/events/{item_id}")
 async def delete_event(item_id: str, request: Request):
-    await require_admin(request); await db.events.delete_one({"id": item_id}); return {"ok": True}
+    await require_admin(request); await db.events.delete_one({"id": item_id})
+    await persist_collection("events")
+    return {"ok": True}
 
 # ---------- Achievements ----------
 @api_router.get("/achievements")
 async def list_achievements():
+    await ensure_collection_loaded("achievements")
     return await db.achievements.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
 @api_router.post("/achievements")
@@ -544,15 +642,20 @@ async def add_achievement(payload: AchievementIn, request: Request):
     await require_admin(request)
     doc = payload.model_dump()
     doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
-    await db.achievements.insert_one(doc); doc.pop("_id", None); return doc
+    await db.achievements.insert_one(doc)
+    await persist_collection("achievements")
+    doc.pop("_id", None); return doc
 
 @api_router.delete("/achievements/{item_id}")
 async def delete_achievement(item_id: str, request: Request):
-    await require_admin(request); await db.achievements.delete_one({"id": item_id}); return {"ok": True}
+    await require_admin(request); await db.achievements.delete_one({"id": item_id})
+    await persist_collection("achievements")
+    return {"ok": True}
 
 # ---------- Facilities ----------
 @api_router.get("/facilities")
 async def list_facilities():
+    await ensure_collection_loaded("facilities")
     return await db.facilities.find({}, {"_id": 0}).sort("order", 1).to_list(100)
 
 @api_router.post("/facilities")
@@ -560,15 +663,20 @@ async def add_facility(payload: FacilityIn, request: Request):
     await require_admin(request)
     doc = payload.model_dump()
     doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
-    await db.facilities.insert_one(doc); doc.pop("_id", None); return doc
+    await db.facilities.insert_one(doc)
+    await persist_collection("facilities")
+    doc.pop("_id", None); return doc
 
 @api_router.delete("/facilities/{item_id}")
 async def delete_facility(item_id: str, request: Request):
-    await require_admin(request); await db.facilities.delete_one({"id": item_id}); return {"ok": True}
+    await require_admin(request); await db.facilities.delete_one({"id": item_id})
+    await persist_collection("facilities")
+    return {"ok": True}
 
 # ---------- Important Links ----------
 @api_router.get("/links")
 async def list_links():
+    await ensure_collection_loaded("links")
     return await db.links.find({}, {"_id": 0}).sort("order", 1).to_list(100)
 
 @api_router.post("/links")
@@ -576,11 +684,15 @@ async def add_link(payload: LinkIn, request: Request):
     await require_admin(request)
     doc = payload.model_dump()
     doc["id"] = str(uuid.uuid4()); doc["created_at"] = datetime.now(timezone.utc).isoformat()
-    await db.links.insert_one(doc); doc.pop("_id", None); return doc
+    await db.links.insert_one(doc)
+    await persist_collection("links")
+    doc.pop("_id", None); return doc
 
 @api_router.delete("/links/{item_id}")
 async def delete_link(item_id: str, request: Request):
-    await require_admin(request); await db.links.delete_one({"id": item_id}); return {"ok": True}
+    await require_admin(request); await db.links.delete_one({"id": item_id})
+    await persist_collection("links")
+    return {"ok": True}
 
 # ---------- Contact ----------
 @api_router.post("/contact")
@@ -590,11 +702,13 @@ async def submit_contact(payload: ContactMessageIn):
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     doc["read"] = False
     await db.contact_messages.insert_one(doc)
+    await persist_collection("contact_messages")
     return {"ok": True, "id": doc["id"]}
 
 @api_router.get("/contact")
 async def list_contact(request: Request):
     await require_admin(request)
+    await ensure_collection_loaded("contact_messages")
     items = await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return items
 
@@ -630,6 +744,7 @@ async def download_file(path: str):
 # ---------- Public stats ----------
 @api_router.get("/stats")
 async def stats():
+    await ensure_collection_loaded("site_content")
     doc = await db.site_content.find_one({"key": "stats"}, {"_id": 0})
     if doc and doc.get("value"):
         return doc["value"]
@@ -816,11 +931,27 @@ async def startup():
             except Exception as mock_err:
                 logger.error(f"Failed to initialize mongomock_motor: {mock_err}")
 
+    # Load existing collections from cloud storage to populate the local DB
+    logger.info("Loading persistent collections from cloud storage...")
+    for coll in PERSISTENT_COLLECTIONS:
+        try:
+            await ensure_collection_loaded(coll, force=True)
+        except Exception as e:
+            logger.warning(f"Initial load failed for {coll}: {e}")
+
     try:
         await seed()
         logger.info("Seed complete")
     except Exception as e:
         logger.error(f"Seed error: {e}")
+
+    # Persist back after seeding in case new defaults were added
+    logger.info("Saving persistent collections to cloud storage...")
+    for coll in PERSISTENT_COLLECTIONS:
+        try:
+            await persist_collection(coll)
+        except Exception as e:
+            logger.error(f"Initial persist failed for {coll}: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
