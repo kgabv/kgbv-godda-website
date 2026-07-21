@@ -1325,7 +1325,27 @@ async function seed() {
     },
     "hostel": {
       "heading": "आवासीय छात्रावास",
-      "body": "सुरक्षित, स्वच्छ एवं आरामदायक छात्रावास सुविधा। 24×7 वार्डन उपस्थिति, पौष्टिक भोजन, चिकित्सा सहायता एवं अध्ययन कक्ष।"
+      "body": "सुरक्षित, स्वच्छ एवं आरामदायक छात्रावास सुविधा। 24×7 वार्डन उपस्थिति, पौष्टिक भोजन, चिकित्सा सहायता एवं अध्ययन कक्ष।",
+      "images": [
+        {
+          "id": "default-1",
+          "url": "https://images.unsplash.com/photo-1573894998033-c0cef4ed722b?crop=entropy&cs=srgb&fm=jpg&q=85",
+          "caption": "छात्रावास भवन",
+          "visible": true
+        },
+        {
+          "id": "default-2",
+          "url": "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?crop=entropy&cs=srgb&fm=jpg&q=85",
+          "caption": "शयन कक्ष (Dormitory)",
+          "visible": true
+        },
+        {
+          "id": "default-3",
+          "url": "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?crop=entropy&cs=srgb&fm=jpg&q=85",
+          "caption": "अध्ययन क्षेत्र (Study Area)",
+          "visible": true
+        }
+      ]
     },
     "branding": {
       "logo_url": "https://customer-assets-wrfwihn1.emergentagent.net/job_e3f9b288-4ca0-4b1b-858c-48bc26649331/artifacts/7brhlrkg_IMG_20260704_154418.png",

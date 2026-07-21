@@ -8,7 +8,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Trash2, Upload, Plus, Save } from "lucide-react";
+import { LogOut, Trash2, Upload, Plus, Save, Eye, EyeOff, GripVertical, Info } from "lucide-react";
 
 const GAL_CATS = ["Campus", "Classrooms", "Hostel", "Library", "Laboratory", "Activities", "Sports", "Events", "Educational Tours", "Celebrations", "Teachers", "Students", "Infrastructure"];
 const TAB_BTN = "rounded-full data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border px-3 py-1.5 text-sm";
@@ -48,6 +48,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="downloads" data-testid="tab-downloads" className={TAB_BTN}>डाउनलोड</TabsTrigger>
             <TabsTrigger value="teachers" data-testid="tab-teachers" className={TAB_BTN}>शिक्षक/स्टाफ</TabsTrigger>
             <TabsTrigger value="facilities" data-testid="tab-facilities" className={TAB_BTN}>सुविधाएँ</TabsTrigger>
+            <TabsTrigger value="hostel" data-testid="tab-hostel" className={TAB_BTN}>छात्रावास</TabsTrigger>
             <TabsTrigger value="links" data-testid="tab-links" className={TAB_BTN}>महत्वपूर्ण लिंक</TabsTrigger>
             <TabsTrigger value="messages" data-testid="tab-messages" className={TAB_BTN}>संदेश</TabsTrigger>
           </TabsList>
@@ -63,6 +64,7 @@ export default function AdminDashboard() {
         <TabsContent value="downloads" className="mt-6"><DownloadsTab /></TabsContent>
         <TabsContent value="teachers" className="mt-6"><TeachersTab /></TabsContent>
         <TabsContent value="facilities" className="mt-6"><FacilitiesTab /></TabsContent>
+        <TabsContent value="hostel" className="mt-6"><HostelTab /></TabsContent>
         <TabsContent value="links" className="mt-6"><LinksTab /></TabsContent>
         <TabsContent value="messages" className="mt-6"><MessagesTab /></TabsContent>
       </Tabs>
@@ -163,7 +165,7 @@ function SectionForm({ title, initial, onSave, fields, testId }) {
 /* ---------- Content Tab (Site Settings) ---------- */
 function ContentTab() {
   const [data, setData] = useState({});
-  const keys = ["branding", "theme", "hero", "about", "vidyalaya_parichay", "vision", "mission", "principal", "warden", "stats", "contact", "social", "footer", "seo", "admission", "academics", "hostel"];
+  const keys = ["branding", "theme", "hero", "about", "vidyalaya_parichay", "vision", "mission", "principal", "warden", "stats", "contact", "social", "footer", "seo", "admission", "academics"];
   useEffect(() => {
     (async () => {
       const res = await Promise.all(keys.map(k => api.get(`/site-content/${k}`).then(r => [k, r.data?.value || {}]).catch(() => [k, {}])));
@@ -265,10 +267,6 @@ function ContentTab() {
     { key: "academics", title: "शैक्षणिक जानकारी", fields: [
       { key: "heading", label: "शीर्षक" },
       { key: "intro", label: "परिचय", type: "textarea" },
-    ]},
-    { key: "hostel", title: "छात्रावास (Hostel) जानकारी", fields: [
-      { key: "heading", label: "शीर्षक" },
-      { key: "body", label: "विवरण", type: "textarea", rows: 5 },
     ]},
   ];
 
@@ -642,6 +640,367 @@ function MessagesTab() {
         </Card>
       ))}
       {items.length === 0 && <div className="text-center text-muted-foreground py-10">कोई संदेश नहीं</div>}
+    </div>
+  );
+}
+
+/* ---------- Hostel Management ---------- */
+function HostelTab() {
+  const [data, setData] = useState({ heading: "आवासीय छात्रावास", body: "", images: [] });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  
+  const replaceInputRefs = useRef({});
+
+  useEffect(() => {
+    api.get("/site-content/hostel")
+      .then(r => {
+        const val = r.data?.value;
+        if (val) {
+          setData({
+            heading: val.heading || "आवासीय छात्रावास",
+            body: val.body || "",
+            images: val.images || []
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put("/site-content", { key: "hostel", value: data });
+      toast.success("छात्रावास सेटिंग्स सफलतापूर्वक सहेजी गईं!");
+    } catch (err) {
+      toast.error("सहेजने में विफल: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const validateFile = (file) => {
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast.error("कृपया केवल JPG, PNG, या WebP चित्र अपलोड करें।");
+      return false;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("चित्र का आकार 5MB से कम होना चाहिए।");
+      return false;
+    }
+    return true;
+  };
+
+  const handleAddImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!validateFile(file)) return;
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data: resData } = await api.post("/upload", fd, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      const absUrl = resData.url.startsWith("http") ? resData.url : `${API.replace(/\/api$/, "")}${resData.url}`;
+      
+      const newImg = {
+        id: "img-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9),
+        url: absUrl,
+        caption: file.name.split('.')[0] || "छात्रावास चित्र",
+        visible: true
+      };
+
+      setData(prev => ({
+        ...prev,
+        images: [...prev.images, newImg]
+      }));
+      toast.success("नया चित्र जोड़ा गया!");
+    } catch (err) {
+      toast.error("अपलोड विफल: " + err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleReplaceImage = async (id, file) => {
+    if (!file) return;
+    if (!validateFile(file)) return;
+
+    toast.loading("चित्र प्रतिस्थापित किया जा रहा है...");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data: resData } = await api.post("/upload", fd, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      const absUrl = resData.url.startsWith("http") ? resData.url : `${API.replace(/\/api$/, "")}${resData.url}`;
+
+      setData(prev => ({
+        ...prev,
+        images: prev.images.map(img => img.id === id ? { ...img, url: absUrl } : img)
+      }));
+      toast.dismiss();
+      toast.success("चित्र प्रतिस्थापित किया गया!");
+    } catch (err) {
+      toast.dismiss();
+      toast.error("प्रतिस्थापन विफल: " + err.message);
+    }
+  };
+
+  const handleDeleteImage = (id) => {
+    if (window.confirm("क्या आप वाकई इस चित्र को हटाना चाहते हैं?")) {
+      setData(prev => ({
+        ...prev,
+        images: prev.images.filter(img => img.id !== id)
+      }));
+      toast.success("चित्र सूची से हटा दिया गया।");
+    }
+  };
+
+  const toggleVisibility = (id) => {
+    setData(prev => ({
+      ...prev,
+      images: prev.images.map(img => img.id === id ? { ...img, visible: img.visible === false ? true : false } : img)
+    }));
+  };
+
+  const handleCaptionChange = (id, caption) => {
+    setData(prev => ({
+      ...prev,
+      images: prev.images.map(img => img.id === id ? { ...img, caption } : img)
+    }));
+  };
+
+  // Drag & Drop reordering
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+    const list = [...data.images];
+    const [draggedItem] = list.splice(draggedIndex, 1);
+    list.splice(targetIndex, 0, draggedItem);
+
+    setData(prev => ({ ...prev, images: list }));
+    setDraggedIndex(null);
+  };
+
+  if (loading) {
+    return <div className="p-10 text-center text-muted-foreground animate-pulse">छात्रावास डेटा लोड हो रहा है...</div>;
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in" id="hostel-tab-container">
+      {/* Header and save button */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+        <div>
+          <h2 className="text-xl font-bold text-foreground">छात्रावास प्रबंधन (Hostel Management)</h2>
+          <p className="text-sm text-muted-foreground">शीर्षक, विवरण, और एकाधिक चित्र गैलरी का प्रबंधन करें।</p>
+        </div>
+        <Button 
+          onClick={handleSave} 
+          disabled={saving} 
+          className="rounded-full shadow-md hover:shadow-lg transition-all"
+          id="hostel-save-btn"
+          data-testid="hostel-save-btn"
+        >
+          <Save className="h-4 w-4 mr-2" />
+          {saving ? "सहेजा जा रहा है..." : "बदलाव सहेजें"}
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left column: Text content */}
+        <div className="lg:col-span-1 space-y-6">
+          <Card className="p-5 rounded-2xl border border-border bg-card/60 backdrop-blur-sm space-y-4">
+            <h3 className="font-bold text-lg text-primary">सामान्य विवरण</h3>
+            
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">छात्रावास शीर्षक</label>
+              <Input 
+                value={data.heading} 
+                onChange={e => setData(prev => ({ ...prev, heading: e.target.value }))}
+                placeholder="शीर्षक दर्ज करें"
+                className="rounded-xl"
+                id="hostel-input-heading"
+                data-testid="hostel-heading-input"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">पूरा विवरण (हिंदी)</label>
+              <Textarea 
+                value={data.body} 
+                onChange={e => setData(prev => ({ ...prev, body: e.target.value }))}
+                placeholder="छात्रावास के बारे में विस्तृत जानकारी, भोजन, समय सारणी आदि लिखें..."
+                rows={10}
+                className="rounded-xl resize-y font-sans leading-relaxed text-sm"
+                id="hostel-input-body"
+                data-testid="hostel-body-input"
+              />
+            </div>
+          </Card>
+        </div>
+
+        {/* Right column: Image gallery manager */}
+        <div className="lg:col-span-2 space-y-4">
+          <Card className="p-5 rounded-2xl border border-border bg-card/60 backdrop-blur-sm space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-3">
+              <div>
+                <h3 className="font-bold text-lg text-primary">छात्रावास चित्र गैलरी</h3>
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <Info className="h-3.5 w-3.5" />
+                  चित्रों को री-ऑर्डर करने के लिए ड्रैग एंड ड्रॉप करें।
+                </p>
+              </div>
+
+              {/* Add image button */}
+              <div className="relative">
+                <input 
+                  type="file" 
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleAddImage}
+                  disabled={uploading}
+                  className="hidden" 
+                  id="hostel-add-image-input"
+                />
+                <Button 
+                  onClick={() => document.getElementById("hostel-add-image-input").click()}
+                  disabled={uploading}
+                  variant="outline"
+                  className="rounded-full border-primary/20 hover:border-primary/50 text-primary bg-primary/5"
+                  id="hostel-add-image-btn"
+                  data-testid="hostel-add-image-btn"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  {uploading ? "अपलोड हो रहा है..." : "नया चित्र अपलोड करें"}
+                </Button>
+              </div>
+            </div>
+
+            {/* List of images */}
+            {data.images.length === 0 ? (
+              <div className="border border-dashed border-border rounded-2xl p-10 text-center text-muted-foreground">
+                <p className="text-sm">कोई चित्र नहीं है। कृपया नया चित्र अपलोड करें।</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="hostel-images-list">
+                {data.images.map((img, index) => (
+                  <div 
+                    key={img.id || index}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                    className={`relative flex flex-col justify-between border rounded-2xl p-3 bg-card shadow-sm transition-all duration-300 hover:shadow-md cursor-grab active:cursor-grabbing ${
+                      img.visible === false ? "opacity-60 border-orange-200 bg-orange-50/5" : "border-border"
+                    } ${draggedIndex === index ? "ring-2 ring-primary scale-[0.98]" : ""}`}
+                    id={`hostel-img-card-${index}`}
+                    data-testid={`hostel-img-card-${index}`}
+                  >
+                    {/* Header: drag handle and image name/status */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <GripVertical className="h-4 w-4 cursor-grab" />
+                        <span className="text-xs font-semibold">क्रम #{index + 1}</span>
+                      </div>
+                      {img.visible === false ? (
+                        <span className="text-[10px] bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded-full">वेबसाइट पर छिपा हुआ</span>
+                      ) : (
+                        <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">वेबसाइट पर दृश्यमान</span>
+                      )}
+                    </div>
+
+                    {/* Image and Caption form row */}
+                    <div className="flex gap-3">
+                      {/* Left: Thumbnail with click replacement */}
+                      <div className="relative h-20 w-24 rounded-lg overflow-hidden bg-muted flex-shrink-0 group">
+                        <img src={img.url} alt="" className="h-full w-full object-cover" />
+                        <button 
+                          onClick={() => replaceInputRefs.current[img.id]?.click()}
+                          className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-medium"
+                          title="बदलें"
+                        >
+                          बदलें
+                        </button>
+                        <input 
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          ref={el => replaceInputRefs.current[img.id] = el}
+                          onChange={(e) => handleReplaceImage(img.id, e.target.files?.[0])}
+                          className="hidden"
+                        />
+                      </div>
+
+                      {/* Right: Caption input */}
+                      <div className="flex-1 flex flex-col justify-center space-y-1">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">कैप्शन (Caption)</span>
+                        <Input 
+                          value={img.caption || ""} 
+                          onChange={(e) => handleCaptionChange(img.id, e.target.value)}
+                          placeholder="उदा. हॉस्टल रूम"
+                          className="h-8 text-xs rounded-lg"
+                          data-testid={`hostel-img-caption-${index}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottom actions bar */}
+                    <div className="flex items-center justify-end gap-1.5 mt-3 border-t border-border/60 pt-2">
+                      <Button 
+                        size="sm" 
+                        type="button"
+                        variant="ghost" 
+                        onClick={() => toggleVisibility(img.id)}
+                        className={`h-8 px-2 rounded-lg text-xs font-medium ${
+                          img.visible === false ? "text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100/50" : "text-muted-foreground"
+                        }`}
+                        title={img.visible === false ? "दिखाएं" : "छिपाएं"}
+                        data-testid={`hostel-img-toggle-visible-${index}`}
+                      >
+                        {img.visible === false ? (
+                          <><EyeOff className="h-3.5 w-3.5 mr-1" /> छिपा हुआ</>
+                        ) : (
+                          <><Eye className="h-3.5 w-3.5 mr-1" /> दृश्यमान</>
+                        )}
+                      </Button>
+
+                      <Button 
+                        size="sm" 
+                        type="button"
+                        variant="ghost" 
+                        onClick={() => handleDeleteImage(img.id)}
+                        className="h-8 px-2 rounded-lg text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50"
+                        title="हटाएं"
+                        data-testid={`hostel-img-delete-${index}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        हटाएं
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
