@@ -48,24 +48,31 @@ export default function Home() {
   return (
     <div data-testid="home-page">
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-cover" loading="eager" />
-        <div className="absolute inset-0 hero-overlay" />
-        <div className="relative max-w-7xl mx-auto px-4 py-24 md:py-36 text-white">
+      <section className="relative overflow-hidden bg-slate-950 min-h-[350px] sm:min-h-[500px] md:min-h-[550px] lg:min-h-[600px] flex flex-col justify-center">
+        {/* Ambient background blur using the same banner image to pad non-standard aspect ratios beautifully */}
+        <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-cover filter blur-2xl opacity-25 scale-105" />
+        
+        {/* Full non-cropped main banner image */}
+        <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-contain" loading="eager" />
+        
+        {/* Overlays for depth and text legibility */}
+        <div className="absolute inset-0 bg-black/45 hero-overlay" />
+        
+        <div className="relative max-w-7xl mx-auto px-4 py-24 md:py-36 text-white w-full z-10">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
             <img src={LOGO_URL} alt="Logo" className="h-24 w-24 rounded-full ring-4 ring-white/30 shadow-2xl" />
-            <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight max-w-3xl">
+            <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight max-w-3xl drop-shadow-md">
               {hero?.title || "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा"}
             </h1>
-            <div className="mt-4 inline-block px-4 py-1.5 rounded-full bg-white/15 backdrop-blur border border-white/25 text-base md:text-lg font-semibold">
+            <div className="mt-4 inline-block px-4 py-1.5 rounded-full bg-white/15 backdrop-blur border border-white/25 text-base md:text-lg font-semibold shadow-md">
               {hero?.subtitle || "शिक्षा • संस्कार • आत्मनिर्भरता"}
             </div>
-            <p className="mt-6 max-w-2xl text-base md:text-lg text-white/90 hindi">
+            <p className="mt-6 max-w-2xl text-base md:text-lg text-white/95 hindi drop-shadow">
               {hero?.description || "ग्रामीण एवं वंचित वर्ग की बालिकाओं के लिए झारखंड शिक्षा विभाग द्वारा संचालित पूर्ण आवासीय विद्यालय।"}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/admission"><Button size="lg" className="rounded-full" data-testid="hero-admission-btn">प्रवेश जानकारी<ArrowRight className="ml-2 h-4 w-4"/></Button></Link>
-              <Link to="/about"><Button size="lg" variant="outline" className="rounded-full bg-white/10 text-white border-white/40 hover:bg-white/20" data-testid="hero-about-btn">विद्यालय के बारे में</Button></Link>
+              <Link to="/admission"><Button size="lg" className="rounded-full shadow-lg" data-testid="hero-admission-btn">प्रवेश जानकारी<ArrowRight className="ml-2 h-4 w-4"/></Button></Link>
+              <Link to="/about"><Button size="lg" variant="outline" className="rounded-full bg-white/10 text-white border-white/40 hover:bg-white/20 shadow-lg" data-testid="hero-about-btn">विद्यालय के बारे में</Button></Link>
             </div>
           </motion.div>
         </div>
