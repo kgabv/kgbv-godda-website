@@ -163,7 +163,7 @@ function SectionForm({ title, initial, onSave, fields, testId }) {
 /* ---------- Content Tab (Site Settings) ---------- */
 function ContentTab() {
   const [data, setData] = useState({});
-  const keys = ["branding", "theme", "hero", "about", "vision", "mission", "principal", "warden", "stats", "contact", "social", "footer", "seo", "admission", "academics", "hostel"];
+  const keys = ["branding", "theme", "hero", "about", "vidyalaya_parichay", "vision", "mission", "principal", "warden", "stats", "contact", "social", "footer", "seo", "admission", "academics", "hostel"];
   useEffect(() => {
     (async () => {
       const res = await Promise.all(keys.map(k => api.get(`/site-content/${k}`).then(r => [k, r.data?.value || {}]).catch(() => [k, {}])));
@@ -206,6 +206,11 @@ function ContentTab() {
       { key: "awards", label: "पुरस्कार", type: "number" },
     ]},
     { key: "about", title: "About School", fields: [
+      { key: "heading", label: "शीर्षक" },
+      { key: "body", label: "पूरा विवरण", type: "textarea", rows: 6 },
+      { key: "image_url", label: "चित्र URL", type: "image" },
+    ]},
+    { key: "vidyalaya_parichay", title: "विद्यालय परिचय (About Page)", fields: [
       { key: "heading", label: "शीर्षक" },
       { key: "body", label: "पूरा विवरण", type: "textarea", rows: 6 },
       { key: "image_url", label: "चित्र URL", type: "image" },
