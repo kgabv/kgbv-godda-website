@@ -25,7 +25,23 @@ export default function Home() {
   const [hero, setHero] = useState(null);
   const [about, setAbout] = useState(null);
   const [gallery, setGallery] = useState([]);
-  const [banners, setBanners] = useState([]);
+  
+  // Initialize from localStorage cache to prevent blinking / blank hero on refresh
+  const [banners, setBanners] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-banners-cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to parse kgbv-banners-cache", e);
+    }
+    return [{ id: "default", image_url: HERO_IMG, is_active: true }];
+  });
+
   const [stats, setStats] = useState({ students: 500, teachers: 30, classes: 7, awards: 45 });
   const [bIdx, setBIdx] = useState(0);
 
@@ -33,7 +49,24 @@ export default function Home() {
     api.get("/site-content/hero").then((r) => setHero(r.data.value)).catch(() => {});
     api.get("/site-content/about").then((r) => setAbout(r.data.value)).catch(() => {});
     api.get("/gallery").then((r) => setGallery(asArray(r.data).slice(0, 6))).catch(() => setGallery([]));
-    api.get("/banners").then((r) => setBanners(asArray(r.data))).catch(() => setBanners([]));
+    
+    // Fetch banners with strict guard to never overwrite with empty or invalid data
+    api.get("/banners")
+      .then((r) => {
+        const fetched = asArray(r.data).filter(b => b && b.image_url);
+        if (fetched.length > 0) {
+          setBanners(fetched);
+          try {
+            localStorage.setItem("kgbv-banners-cache", JSON.stringify(fetched));
+          } catch (e) {
+            console.warn("Failed to set kgbv-banners-cache", e);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch banners", err);
+      });
+
     api.get("/stats").then((r) => setStats(r.data)).catch(() => {});
   }, []);
 
