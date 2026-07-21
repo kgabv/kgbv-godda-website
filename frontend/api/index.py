@@ -447,6 +447,32 @@ async def auth_logout(request: Request, response: Response):
     return {"ok": True}
 
 # ---------- Site Content ----------
+@api_router.get("/debug-env")
+async def debug_env():
+    global storage_key
+    env_keys = list(os.environ.keys())
+    key_val = os.environ.get("EMERGENT_LLM_KEY", "")
+    key_present = bool(key_val)
+    key_len = len(key_val)
+    key_prefix = key_val[:6] if key_len >= 6 else ""
+    
+    storage_err = None
+    test_storage_key = None
+    try:
+        test_storage_key = init_storage()
+    except Exception as e:
+        storage_err = str(e)
+        
+    return {
+        "EMERGENT_LLM_KEY_present": key_present,
+        "EMERGENT_LLM_KEY_len": key_len,
+        "EMERGENT_LLM_KEY_prefix": key_prefix,
+        "storage_test_key_prefix": test_storage_key[:6] if test_storage_key else None,
+        "storage_test_error": storage_err,
+        "env_keys": env_keys,
+        "db_is_mock": db_is_mock,
+    }
+
 @api_router.get("/site-content/{key}")
 async def get_site_content(key: str):
     await ensure_collection_loaded("site_content")
