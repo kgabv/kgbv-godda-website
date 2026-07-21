@@ -15,7 +15,7 @@ export default function About() {
     <div className="max-w-6xl mx-auto px-4 py-12" data-testid="about-page">
       <h1 className="text-4xl md:text-5xl font-extrabold text-primary">विद्यालय परिचय</h1>
       <p className="mt-2 text-muted-foreground">कस्तूरबा गांधी बालिका विद्यालय, गोड्डा — झारखंड शिक्षा विभाग</p>
-      <img src="https://images.unsplash.com/photo-1709817243586-6ddd4e6822c1?crop=entropy&cs=srgb&fm=jpg&q=85" alt="Campus" className="mt-8 w-full h-72 md:h-96 object-cover rounded-3xl shadow-lg" />
+      <img src={about?.image_url || "https://images.unsplash.com/photo-1709817243586-6ddd4e6822c1?crop=entropy&cs=srgb&fm=jpg&q=85"} alt="Campus" className="mt-8 w-full h-72 md:h-96 object-cover rounded-3xl shadow-lg" />
       <div className="mt-8 grid md:grid-cols-3 gap-6">
         <Card className="p-6 rounded-2xl md:col-span-2">
           <h2 className="text-2xl font-bold text-primary">{about?.heading || "हमारे विद्यालय के बारे में"}</h2>

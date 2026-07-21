@@ -123,7 +123,7 @@ export default function Home() {
 
       {/* About preview */}
       <section className="max-w-7xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-10 items-center" data-testid="about-preview">
-        <img src={ABOUT_IMG} alt="Students" className="rounded-3xl shadow-xl object-cover w-full h-[380px]" />
+        <img src={about?.image_url || ABOUT_IMG} alt="Students" className="rounded-3xl shadow-xl object-cover w-full h-[380px]" />
         <div>
           <div className="inline-flex items-center gap-2 text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">
             <Sparkles className="h-4 w-4" /> हमारे बारे में

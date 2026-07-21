@@ -208,6 +208,7 @@ function ContentTab() {
     { key: "about", title: "About School", fields: [
       { key: "heading", label: "शीर्षक" },
       { key: "body", label: "पूरा विवरण", type: "textarea", rows: 6 },
+      { key: "image_url", label: "चित्र URL", type: "image" },
     ]},
     { key: "vision", title: "हमारी दृष्टि (Vision)", fields: [
       { key: "title", label: "शीर्षक" },
