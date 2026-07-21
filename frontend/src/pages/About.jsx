@@ -3,16 +3,99 @@ import { api } from "../lib/api";
 import { Card } from "../components/ui/card";
 
 export default function About() {
-  const [about, setAbout] = useState(null);
-  const [vidyalayaParichay, setVidyalayaParichay] = useState(null);
-  const [vision, setVision] = useState(null);
-  const [mission, setMission] = useState(null);
+  const [about, setAbout] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-about-cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [vidyalayaParichay, setVidyalayaParichay] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-parichay-cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [vision, setVision] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-vision-cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [mission, setMission] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-mission-cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [loading, setLoading] = useState(!about && !vidyalayaParichay);
+
   useEffect(() => {
-    api.get("/site-content/about").then((r) => setAbout(r.data.value)).catch(() => {});
-    api.get("/site-content/vidyalaya_parichay").then((r) => setVidyalayaParichay(r.data.value)).catch(() => {});
-    api.get("/site-content/vision").then((r) => setVision(r.data.value)).catch(() => {});
-    api.get("/site-content/mission").then((r) => setMission(r.data.value)).catch(() => {});
+    const p1 = api.get("/site-content/about").then((r) => {
+      if (r.data?.value) {
+        setAbout(r.data.value);
+        try {
+          localStorage.setItem("kgbv-about-cache", JSON.stringify(r.data.value));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    const p2 = api.get("/site-content/vidyalaya_parichay").then((r) => {
+      if (r.data?.value) {
+        setVidyalayaParichay(r.data.value);
+        try {
+          localStorage.setItem("kgbv-parichay-cache", JSON.stringify(r.data.value));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    const p3 = api.get("/site-content/vision").then((r) => {
+      if (r.data?.value) {
+        setVision(r.data.value);
+        try {
+          localStorage.setItem("kgbv-vision-cache", JSON.stringify(r.data.value));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    const p4 = api.get("/site-content/mission").then((r) => {
+      if (r.data?.value) {
+        setMission(r.data.value);
+        try {
+          localStorage.setItem("kgbv-mission-cache", JSON.stringify(r.data.value));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    Promise.allSettled([p1, p2, p3, p4]).finally(() => {
+      setLoading(false);
+    });
   }, []);
+
+  if (loading && !about && !vidyalayaParichay) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-12 animate-pulse" id="about-loading-skeleton">
+        <div className="h-10 w-1/3 bg-muted rounded-xl mb-2" />
+        <div className="h-4 w-1/4 bg-muted rounded-xl mb-8" />
+        <div className="w-full h-72 md:h-96 bg-muted rounded-3xl mb-8" />
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="h-64 bg-muted rounded-3xl md:col-span-2" />
+          <div className="space-y-4">
+            <div className="h-28 bg-muted rounded-3xl" />
+            <div className="h-28 bg-muted rounded-3xl" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const heading = vidyalayaParichay?.heading || about?.heading || "हमारे विद्यालय के बारे में";
   const body = vidyalayaParichay?.body || about?.body || "";

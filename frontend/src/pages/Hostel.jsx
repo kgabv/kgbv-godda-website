@@ -4,14 +4,44 @@ import { Card } from "../components/ui/card";
 import { Eye, Image as ImageIcon } from "lucide-react";
 
 export default function Hostel() {
-  const [h, setH] = useState(null);
+  const [h, setH] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-hostel-cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(!h);
   const [activeImage, setActiveImage] = useState(null);
 
   useEffect(() => {
     api.get("/site-content/hostel")
-      .then((r) => setH(r.data?.value))
-      .catch(() => {});
+      .then((r) => {
+        const val = r.data?.value;
+        if (val) {
+          setH(val);
+          try {
+            localStorage.setItem("kgbv-hostel-cache", JSON.stringify(val));
+          } catch (e) {
+            console.warn("Failed to set hostel cache", e);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading && !h) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-12 animate-pulse" id="hostel-loading-skeleton">
+        <div className="h-10 w-2/3 bg-muted rounded-xl mb-4" />
+        <div className="h-4 w-1/3 bg-muted rounded-xl mb-8" />
+        <div className="w-full h-[300px] md:h-[450px] bg-muted rounded-3xl mb-10" />
+        <div className="h-48 bg-muted rounded-3xl" />
+      </div>
+    );
+  }
 
   const heading = h?.heading || "आवासीय छात्रावास";
   const body = h?.body || "छात्रावास संबंधी जानकारी शीघ्र उपलब्ध होगी।";

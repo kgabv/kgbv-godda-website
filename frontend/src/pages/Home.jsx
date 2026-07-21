@@ -22,8 +22,22 @@ const FAC = [
 ];
 
 export default function Home() {
-  const [hero, setHero] = useState(null);
-  const [about, setAbout] = useState(null);
+  const [hero, setHero] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-hero-cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [about, setAbout] = useState(() => {
+    try {
+      const cached = localStorage.getItem("kgbv-about-cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [gallery, setGallery] = useState([]);
   
   // Initialize from localStorage cache to prevent blinking / blank hero on refresh
@@ -46,8 +60,24 @@ export default function Home() {
   const [bIdx, setBIdx] = useState(0);
 
   useEffect(() => {
-    api.get("/site-content/hero").then((r) => setHero(r.data.value)).catch(() => {});
-    api.get("/site-content/about").then((r) => setAbout(r.data.value)).catch(() => {});
+    api.get("/site-content/hero").then((r) => {
+      if (r.data?.value) {
+        setHero(r.data.value);
+        try {
+          localStorage.setItem("kgbv-hero-cache", JSON.stringify(r.data.value));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    api.get("/site-content/about").then((r) => {
+      if (r.data?.value) {
+        setAbout(r.data.value);
+        try {
+          localStorage.setItem("kgbv-about-cache", JSON.stringify(r.data.value));
+        } catch {}
+      }
+    }).catch(() => {});
+
     api.get("/gallery").then((r) => setGallery(asArray(r.data).slice(0, 6))).catch(() => setGallery([]));
     
     // Fetch banners with strict guard to never overwrite with empty or invalid data
@@ -123,25 +153,42 @@ export default function Home() {
 
       {/* About preview */}
       <section className="max-w-7xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-10 items-center" data-testid="about-preview">
-        <img src={about?.image_url || ABOUT_IMG} alt="Students" className="rounded-3xl shadow-xl object-cover w-full h-[380px]" />
-        <div>
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">
-            <Sparkles className="h-4 w-4" /> हमारे बारे में
-          </div>
-          <h2 className="mt-3 text-3xl md:text-4xl font-extrabold">बालिकाओं के सर्वांगीण विकास का केंद्र</h2>
-          <p className="mt-4 hindi text-foreground/85">{about?.body || "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा एक पूर्ण आवासीय विद्यालय है जो बालिकाओं को कक्षा VI से XII तक निःशुल्क गुणवत्तापूर्ण शिक्षा प्रदान करता है।"}</p>
-          <div className="mt-6 grid sm:grid-cols-2 gap-4">
-            <Card className="p-4 rounded-2xl">
-              <div className="font-bold text-primary">हमारा उद्देश्य</div>
-              <div className="text-sm mt-1 hindi">{about?.mission}</div>
-            </Card>
-            <Card className="p-4 rounded-2xl">
-              <div className="font-bold text-primary">हमारी दृष्टि</div>
-              <div className="text-sm mt-1 hindi">{about?.vision}</div>
-            </Card>
-          </div>
-          <Link to="/about" className="inline-flex items-center gap-2 mt-6 text-primary font-semibold">और जानें <ArrowRight className="h-4 w-4"/></Link>
-        </div>
+        {!about ? (
+          <>
+            <div className="w-full h-[380px] bg-muted animate-pulse rounded-3xl" />
+            <div className="space-y-4 animate-pulse">
+              <div className="h-6 w-24 bg-muted rounded-full" />
+              <div className="h-10 w-3/4 bg-muted rounded-xl" />
+              <div className="h-20 w-full bg-muted rounded-xl" />
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="h-24 bg-muted rounded-2xl" />
+                <div className="h-24 bg-muted rounded-2xl" />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <img src={about.image_url || ABOUT_IMG} alt="Students" className="rounded-3xl shadow-xl object-cover w-full h-[380px]" />
+            <div>
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">
+                <Sparkles className="h-4 w-4" /> हमारे बारे में
+              </div>
+              <h2 className="mt-3 text-3xl md:text-4xl font-extrabold">बालिकाओं के सर्वांगीण विकास का केंद्र</h2>
+              <p className="mt-4 hindi text-foreground/85">{about.body || "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा एक पूर्ण आवासीय विद्यालय है जो बालिकाओं को कक्षा VI से XII तक निःशुल्क गुणवत्तापूर्ण शिक्षा प्रदान करता है।"}</p>
+              <div className="mt-6 grid sm:grid-cols-2 gap-4">
+                <Card className="p-4 rounded-2xl">
+                  <div className="font-bold text-primary">हमारा उद्देश्य</div>
+                  <div className="text-sm mt-1 hindi">{about.mission}</div>
+                </Card>
+                <Card className="p-4 rounded-2xl">
+                  <div className="font-bold text-primary">हमारी दृष्टि</div>
+                  <div className="text-sm mt-1 hindi">{about.vision}</div>
+                </Card>
+              </div>
+              <Link to="/about" className="inline-flex items-center gap-2 mt-6 text-primary font-semibold">और जानें <ArrowRight className="h-4 w-4"/></Link>
+            </div>
+          </>
+        )}
       </section>
 
       {/* Facilities preview */}
