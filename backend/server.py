@@ -141,12 +141,10 @@ last_loaded = {}
 
 async def ensure_collection_loaded(coll_name: str, force: bool = False):
     global last_loaded
-    now = datetime.now(timezone.utc)
     if not force and coll_name in last_loaded:
-        elapsed = (now - last_loaded[coll_name]).total_seconds()
-        if elapsed < TTL_SECONDS:
-            return
-            
+        return
+        
+    now = datetime.now(timezone.utc)
     try:
         path = f"db_collections/{coll_name}.json"
         content, _ = get_object(path)

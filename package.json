@@ -7,8 +7,8 @@
   "scripts": {
     "postinstall": "npm install --prefix frontend --legacy-peer-deps",
     "build": "npm run build --prefix frontend",
-    "dev": "/app/applet/backend/venv/bin/python -m uvicorn server:app --app-dir /app/applet/backend --host 0.0.0.0 --port 3000",
-    "start": "/app/applet/backend/venv/bin/python -m uvicorn server:app --app-dir /app/applet/backend --host 0.0.0.0 --port 3000",
+    "dev": "node server.js",
+    "start": "node server.js",
     "lint": "echo 'No linting required'"
   },
   "dependencies": {
