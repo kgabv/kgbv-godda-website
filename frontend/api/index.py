@@ -68,6 +68,16 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
             data=data, timeout=30,
         )
         resp.raise_for_status()
+        
+        # Also sync locally on success to keep local copy updated
+        dest = LOCAL_UPLOADS_DIR / path
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest, "wb") as f:
+                f.write(data)
+        except Exception as write_err:
+            logger.debug(f"Could not cache put_object locally: {write_err}")
+            
         return resp.json()
     except Exception as e:
         logger.warning(f"Using local storage fallback for put_object '{path}' due to: {e}")
@@ -78,10 +88,7 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
         return {"path": path, "size": len(data)}
 
 def get_object(path: str):
-    dest = LOCAL_UPLOADS_DIR / path
-    if dest.exists():
-        with open(dest, "rb") as f:
-            return f.read(), "application/octet-stream"
+    # Remote-first: Remote storage is the single source of truth for cloud persistence
     try:
         key = init_storage()
         resp = requests.get(
@@ -89,8 +96,23 @@ def get_object(path: str):
             headers={"X-Storage-Key": key}, timeout=30,
         )
         resp.raise_for_status()
+        
+        # Sync fetched data locally to keep cache updated
+        dest = LOCAL_UPLOADS_DIR / path
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest, "wb") as f:
+                f.write(resp.content)
+        except Exception as write_err:
+            logger.debug(f"Could not cache fetched get_object locally: {write_err}")
+            
         return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
     except Exception as e:
+        logger.warning(f"Remote get_object '{path}' failed: {e}. Checking local fallback.")
+        dest = LOCAL_UPLOADS_DIR / path
+        if dest.exists():
+            with open(dest, "rb") as f:
+                return f.read(), "application/octet-stream"
         logger.error(f"Failed to get_object '{path}' from both local and remote: {e}")
         raise e
 
@@ -109,7 +131,8 @@ PERSISTENT_COLLECTIONS = [
     "links",
     "users",
     "user_sessions",
-    "contact_messages"
+    "contact_messages",
+    "files"
 ]
 
 TTL_SECONDS = 5
@@ -730,15 +753,28 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         "is_deleted": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
+    await persist_collection("files")
     return {"id": file_id, "url": file_url, "storage_path": result["path"], "content_type": file.content_type}
 
 @api_router.get("/files/{path:path}")
 async def download_file(path: str):
-    record = await db.files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
-    if not record:
+    await ensure_collection_loaded("files")
+    try:
+        data, content_type = get_object(path)
+    except Exception as e:
         raise HTTPException(status_code=404, detail="File not found")
-    data, content_type = get_object(path)
-    return FastAPIResponse(content=data, media_type=record.get("content_type") or content_type)
+        
+    record = await db.files.find_one({"storage_path": path}, {"_id": 0})
+    media_type = record.get("content_type") if record else None
+    if not media_type or media_type == "application/octet-stream":
+        media_type = content_type
+    if not media_type or media_type == "application/octet-stream":
+        import mimetypes
+        guess, _ = mimetypes.guess_type(path)
+        if guess:
+            media_type = guess
+            
+    return FastAPIResponse(content=data, media_type=media_type)
 
 # ---------- Public stats ----------
 @api_router.get("/stats")
