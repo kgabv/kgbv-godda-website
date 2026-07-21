@@ -193,9 +193,11 @@ async function putObject(objectPath, dataBuffer, contentType) {
 }
 
 async function getObject(objectPath) {
-  // 1. Try local cache first for maximum speed and reliability
   const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
-  if (fs.existsSync(dest)) {
+  const isDbCollection = objectPath.startsWith("db_collections/");
+
+  // 1. Try local cache first for files that are NOT database collections
+  if (!isDbCollection && fs.existsSync(dest)) {
     try {
       const stat = fs.statSync(dest);
       if (stat.size > 0) {
@@ -247,6 +249,19 @@ async function getObject(objectPath) {
     return { data, contentType };
   } catch (ghErr) {
     console.warn(`GitHub getObject fallback failed: ${ghErr.message}.`);
+  }
+
+  // 4. For db collections, if cloud storage fetch failed, fall back to local file
+  if (isDbCollection && fs.existsSync(dest)) {
+    try {
+      const stat = fs.statSync(dest);
+      if (stat.size > 0) {
+        const dataBuffer = fs.readFileSync(dest);
+        return { data: dataBuffer, contentType: getMimeType(objectPath) };
+      }
+    } catch (statErr) {
+      console.warn(`Could not read local fallback for ${dest}: ${statErr.message}`);
+    }
   }
 
   throw new Error(`File ${objectPath} not found in any storage provider`);
@@ -1322,6 +1337,7 @@ async function seed() {
   };
 
   await ensureCollectionLoaded("site_content");
+  let changed = false;
   for (const [key, value] of Object.entries(defaults)) {
     const exists = collections["site_content"].some(sc => sc.key === key);
     if (!exists) {
@@ -1330,64 +1346,12 @@ async function seed() {
         value,
         updated_at: new Date().toISOString()
       });
+      changed = true;
     }
   }
 
-  await ensureCollectionLoaded("notices");
-  if (collections["notices"].length === 0) {
-    const samples = [
-      { "title": "सत्र 2025-26 के लिए प्रवेश प्रारंभ", "body": "कक्षा VI हेतु आवेदन आमंत्रित। अंतिम तिथि: 30 जून।", "priority": "urgent", "is_active": true },
-      { "title": "वार्षिक खेल दिवस - 15 अगस्त", "body": "सभी छात्राओं की उपस्थिति अनिवार्य।", "priority": "normal", "is_active": true },
-      { "title": "मासिक परीक्षा - अगस्त सप्ताह 3", "body": "समय-सारणी नोटिस बोर्ड पर देखें।", "priority": "normal", "is_active": true },
-      { "title": "स्वच्छता अभियान - प्रत्येक शनिवार", "body": "पर्यावरण संरक्षण में सहयोग करें।", "priority": "normal", "is_active": true }
-    ];
-    for (const s of samples) {
-      collections["notices"].push({
-        ...s,
-        id: uuidv4(),
-        created_at: new Date().toISOString()
-      });
-    }
-  }
-
-  await ensureCollectionLoaded("gallery");
-  if (collections["gallery"].length === 0) {
-    const images = [
-      ["मुख्य परिसर", "Campus", "https://images.unsplash.com/photo-1709817243586-6ddd4e6822c1?crop=entropy&cs=srgb&fm=jpg&q=85"],
-      ["आधुनिक कक्षा", "Classrooms", "https://images.unsplash.com/photo-1573894998033-c0cef4ed722b?crop=entropy&cs=srgb&fm=jpg&q=85"],
-      ["पुस्तकालय", "Library", "https://images.pexels.com/photos/33745700/pexels-photo-33745700.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"],
-      ["विज्ञान शिक्षण", "Laboratory", "https://images.pexels.com/photos/35551010/pexels-photo-35551010.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"],
-      ["खेलकूद", "Sports", "https://images.unsplash.com/photo-1525088068454-ff2c453e50e9?crop=entropy&cs=srgb&fm=jpg&q=85"],
-      ["बैडमिंटन", "Sports", "https://images.pexels.com/photos/7351720/pexels-photo-7351720.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"],
-      ["योग सत्र", "Activities", "https://images.pexels.com/photos/34058359/pexels-photo-34058359.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"],
-      ["अध्ययनशील छात्राएँ", "Students", "https://images.unsplash.com/flagged/photo-1574097656146-0b43b7660cb6?crop=entropy&cs=srgb&fm=jpg&q=85"]
-    ];
-    for (const [title, category, url] of images) {
-      collections["gallery"].push({
-        id: uuidv4(),
-        title,
-        category,
-        image_url: url,
-        caption: "",
-        created_at: new Date().toISOString()
-      });
-    }
-  }
-
-  await ensureCollectionLoaded("videos");
-  if (collections["videos"].length === 0) {
-    collections["videos"].push({
-      id: uuidv4(),
-      title: "विद्यालय परिचय",
-      youtube_id: "dQw4w9WgXcQ",
-      description: "KGBV Godda का परिचय।",
-      category: "About",
-      created_at: new Date().toISOString()
-    });
-  }
-
-  for (const coll of PERSISTENT_COLLECTIONS) {
-    await persistCollection(coll);
+  if (changed) {
+    await persistCollection("site_content");
   }
 }
 

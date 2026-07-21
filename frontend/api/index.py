@@ -171,9 +171,11 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
     return {"path": path, "size": len(data)}
 
 def get_object(path: str):
-    # 1. Try local cache first for maximum speed and reliability
     dest = LOCAL_UPLOADS_DIR / path
-    if dest.exists() and dest.stat().st_size > 0:
+    is_db_collection = path.startswith("db_collections/")
+
+    # 1. Try local cache first for files that are NOT database collections
+    if not is_db_collection and dest.exists() and dest.stat().st_size > 0:
         try:
             with open(dest, "rb") as f:
                 import mimetypes
@@ -216,9 +218,14 @@ def get_object(path: str):
     except Exception as gh_err:
         logger.warning(f"GitHub get_object fallback failed: {gh_err}. Checking local fallback.")
 
-    if dest.exists():
-        with open(dest, "rb") as f:
-            return f.read(), "application/octet-stream"
+    # 4. For db collections, if cloud storage fetch failed, fall back to local file
+    if is_db_collection and dest.exists():
+        try:
+            with open(dest, "rb") as f:
+                return f.read(), "application/octet-stream"
+        except Exception as read_err:
+            logger.warning(f"Failed to read local fallback cache: {read_err}")
+
     logger.error(f"Failed to get_object '{path}' from both local and remote: no persistent storage succeeded.")
     raise FileNotFoundError(f"File {path} not found in any storage provider")
 
@@ -1008,51 +1015,15 @@ async def seed():
             "background": "#F5F9FE",
         },
     }
+    changed = False
     for k, v in defaults.items():
         exists = await db.site_content.find_one({"key": k})
         if not exists:
             await db.site_content.insert_one({"key": k, "value": v, "updated_at": datetime.now(timezone.utc).isoformat()})
+            changed = True
 
-    # Seed sample notices
-    if await db.notices.count_documents({}) == 0:
-        samples = [
-            {"title": "सत्र 2025-26 के लिए प्रवेश प्रारंभ", "body": "कक्षा VI हेतु आवेदन आमंत्रित। अंतिम तिथि: 30 जून।", "priority": "urgent", "is_active": True},
-            {"title": "वार्षिक खेल दिवस - 15 अगस्त", "body": "सभी छात्राओं की उपस्थिति अनिवार्य।", "priority": "normal", "is_active": True},
-            {"title": "मासिक परीक्षा - अगस्त सप्ताह 3", "body": "समय-सारणी नोटिस बोर्ड पर देखें।", "priority": "normal", "is_active": True},
-            {"title": "स्वच्छता अभियान - प्रत्येक शनिवार", "body": "पर्यावरण संरक्षण में सहयोग करें।", "priority": "normal", "is_active": True},
-        ]
-        for s in samples:
-            s["id"] = str(uuid.uuid4())
-            s["created_at"] = datetime.now(timezone.utc).isoformat()
-            await db.notices.insert_one(s)
-
-    # Seed sample gallery
-    if await db.gallery.count_documents({}) == 0:
-        images = [
-            ("मुख्य परिसर", "Campus", "https://images.unsplash.com/photo-1709817243586-6ddd4e6822c1?crop=entropy&cs=srgb&fm=jpg&q=85"),
-            ("आधुनिक कक्षा", "Classrooms", "https://images.unsplash.com/photo-1573894998033-c0cef4ed722b?crop=entropy&cs=srgb&fm=jpg&q=85"),
-            ("पुस्तकालय", "Library", "https://images.pexels.com/photos/33745700/pexels-photo-33745700.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
-            ("विज्ञान शिक्षण", "Laboratory", "https://images.pexels.com/photos/35551010/pexels-photo-35551010.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
-            ("खेलकूद", "Sports", "https://images.unsplash.com/photo-1525088068454-ff2c453e50e9?crop=entropy&cs=srgb&fm=jpg&q=85"),
-            ("बैडमिंटन", "Sports", "https://images.pexels.com/photos/7351720/pexels-photo-7351720.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
-            ("योग सत्र", "Activities", "https://images.pexels.com/photos/34058359/pexels-photo-34058359.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
-            ("अध्ययनशील छात्राएँ", "Students", "https://images.unsplash.com/flagged/photo-1574097656146-0b43b7660cb6?crop=entropy&cs=srgb&fm=jpg&q=85"),
-        ]
-        for t, c, u in images:
-            await db.gallery.insert_one({
-                "id": str(uuid.uuid4()), "title": t, "category": c, "image_url": u,
-                "caption": "", "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-
-    # Seed sample videos
-    if await db.videos.count_documents({}) == 0:
-        samples = [
-            {"title": "विद्यालय परिचय", "youtube_id": "dQw4w9WgXcQ", "description": "KGBV Godda का परिचय।", "category": "About"},
-        ]
-        for s in samples:
-            s["id"] = str(uuid.uuid4())
-            s["created_at"] = datetime.now(timezone.utc).isoformat()
-            await db.videos.insert_one(s)
+    if changed:
+        await persist_collection("site_content")
 
 app.include_router(api_router)
 
@@ -1114,14 +1085,6 @@ async def startup():
         logger.info("Seed complete")
     except Exception as e:
         logger.error(f"Seed error: {e}")
-
-    # Persist back after seeding in case new defaults were added
-    logger.info("Saving persistent collections to cloud storage...")
-    for coll in PERSISTENT_COLLECTIONS:
-        try:
-            await persist_collection(coll)
-        except Exception as e:
-            logger.error(f"Initial persist failed for {coll}: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
