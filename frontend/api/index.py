@@ -114,14 +114,14 @@ def github_get_object(path: str):
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{repo_path}"
     headers = {
         "Authorization": f"token {get_github_token()}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github.v3.raw"
     }
     resp = requests.get(url, headers=headers, timeout=15)
     if resp.status_code == 200:
-        data_json = resp.json()
-        content_b64 = data_json.get("content", "").replace("\n", "").replace("\r", "")
-        content = base64.b64decode(content_b64)
-        sha_cache[path] = data_json.get("sha")
+        content = resp.content
+        etag = resp.headers.get("etag")
+        if etag:
+            sha_cache[path] = etag.replace('"', '')
         return content, "application/octet-stream"
     elif resp.status_code == 404:
         raise FileNotFoundError(f"File {path} not found in GitHub")
@@ -140,6 +140,15 @@ def init_storage():
     return storage_key
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
+    # Always save locally first to guarantee immediate local accessibility
+    dest = LOCAL_UPLOADS_DIR / path
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, "wb") as f:
+            f.write(data)
+    except Exception as write_err:
+        logger.debug(f"Could not cache put_object locally: {write_err}")
+
     if EMERGENT_LLM_KEY:
         try:
             key = init_storage()
@@ -149,16 +158,6 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
                 data=data, timeout=30,
             )
             resp.raise_for_status()
-            
-            # Also sync locally on success to keep local copy updated
-            dest = LOCAL_UPLOADS_DIR / path
-            try:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                with open(dest, "wb") as f:
-                    f.write(data)
-            except Exception as write_err:
-                logger.debug(f"Could not cache put_object locally: {write_err}")
-                
             return resp.json()
         except Exception as e:
             logger.warning(f"Emergent storage failed: {e}. Trying GitHub fallback.")
@@ -169,14 +168,21 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
     except Exception as gh_err:
         logger.error(f"GitHub put_object fallback failed: {gh_err}. Falling back to local/tmp.")
 
-    # Fallback to local /tmp storage
-    dest = LOCAL_UPLOADS_DIR / path
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with open(dest, "wb") as f:
-        f.write(data)
     return {"path": path, "size": len(data)}
 
 def get_object(path: str):
+    # 1. Try local cache first for maximum speed and reliability
+    dest = LOCAL_UPLOADS_DIR / path
+    if dest.exists() and dest.stat().st_size > 0:
+        try:
+            with open(dest, "rb") as f:
+                import mimetypes
+                guess, _ = mimetypes.guess_type(path)
+                return f.read(), guess or "application/octet-stream"
+        except Exception as read_err:
+            logger.warning(f"Failed to read local cache: {read_err}")
+
+    # 2. Fall back to Emergent Cloud Storage
     if EMERGENT_LLM_KEY:
         try:
             key = init_storage()
@@ -184,26 +190,22 @@ def get_object(path: str):
                 f"{STORAGE_URL}/objects/{path}",
                 headers={"X-Storage-Key": key}, timeout=30,
             )
-            resp.raise_for_status()
-            
-            # Sync fetched data locally to keep cache updated
-            dest = LOCAL_UPLOADS_DIR / path
-            try:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                with open(dest, "wb") as f:
-                    f.write(resp.content)
-            except Exception as write_err:
-                logger.debug(f"Could not cache fetched get_object locally: {write_err}")
-                
-            return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+            if resp.ok:
+                # Sync fetched data locally to keep cache updated
+                try:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with open(dest, "wb") as f:
+                        f.write(resp.content)
+                except Exception as write_err:
+                    logger.debug(f"Could not cache fetched get_object locally: {write_err}")
+                return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
         except Exception as e:
             logger.warning(f"Emergent get_object failed: {e}. Trying GitHub fallback.")
 
-    # Try GitHub persistence as durable cloud fallback
+    # 3. Fall back to GitHub
     try:
         content, content_type = github_get_object(path)
         # Sync locally to keep cache updated
-        dest = LOCAL_UPLOADS_DIR / path
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
             with open(dest, "wb") as f:
@@ -214,7 +216,6 @@ def get_object(path: str):
     except Exception as gh_err:
         logger.warning(f"GitHub get_object fallback failed: {gh_err}. Checking local fallback.")
 
-    dest = LOCAL_UPLOADS_DIR / path
     if dest.exists():
         with open(dest, "rb") as f:
             return f.read(), "application/octet-stream"

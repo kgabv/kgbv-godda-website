@@ -112,15 +112,17 @@ async function githubGetObject(objectPath) {
   const token = getGithubToken();
   const headers = {
     "Authorization": `token ${token}`,
-    "Accept": "application/vnd.github.v3+json"
+    "Accept": "application/vnd.github.v3.raw"
   };
 
   const resp = await fetch(url, { headers });
   if (resp.status === 200) {
-    const dataJson = await resp.json();
-    const contentB64 = dataJson.content.replace(/[\r\n]/g, '');
-    const dataBuffer = Buffer.from(contentB64, 'base64');
-    shaCache[objectPath] = dataJson.sha;
+    const dataBuffer = Buffer.from(await resp.arrayBuffer());
+    const etag = resp.headers.get("etag");
+    if (etag) {
+      const sha = etag.replace(/"/g, '');
+      shaCache[objectPath] = sha;
+    }
     return { data: dataBuffer, contentType: "application/octet-stream" };
   } else if (resp.status === 404) {
     throw new Error(`File ${objectPath} not found in GitHub`);
@@ -150,6 +152,15 @@ async function initStorage() {
 }
 
 async function putObject(objectPath, dataBuffer, contentType) {
+  // Always save locally first to guarantee immediate local accessibility
+  const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
+  try {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, dataBuffer);
+  } catch (err) {
+    console.warn(`Could not cache putObject locally: ${err.message}`);
+  }
+
   if (EMERGENT_LLM_KEY) {
     try {
       const key = await initStorage();
@@ -165,16 +176,6 @@ async function putObject(objectPath, dataBuffer, contentType) {
         throw new Error(`Cloud storage PUT failed: ${resp.statusText}`);
       }
       const result = await resp.json();
-
-      // Cache locally
-      const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
-      try {
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, dataBuffer);
-      } catch (err) {
-        console.warn(`Could not cache putObject locally: ${err.message}`);
-      }
-
       return result;
     } catch (e) {
       console.warn(`Emergent storage putObject failed: ${e.message}. Trying GitHub fallback.`);
@@ -188,13 +189,25 @@ async function putObject(objectPath, dataBuffer, contentType) {
     console.error(`GitHub putObject fallback failed: ${ghErr.message}. Falling back to local/tmp.`);
   }
 
-  const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, dataBuffer);
   return { path: objectPath, size: dataBuffer.length };
 }
 
 async function getObject(objectPath) {
+  // 1. Try local cache first for maximum speed and reliability
+  const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
+  if (fs.existsSync(dest)) {
+    try {
+      const stat = fs.statSync(dest);
+      if (stat.size > 0) {
+        const dataBuffer = fs.readFileSync(dest);
+        return { data: dataBuffer, contentType: getMimeType(objectPath) };
+      }
+    } catch (statErr) {
+      console.warn(`Could not read file stats for ${dest}: ${statErr.message}`);
+    }
+  }
+
+  // 2. Fall back to Emergent Cloud Storage
   if (EMERGENT_LLM_KEY) {
     try {
       const key = await initStorage();
@@ -202,32 +215,29 @@ async function getObject(objectPath) {
         method: 'GET',
         headers: { 'X-Storage-Key': key }
       });
-      if (!resp.ok) {
-        throw new Error(`Cloud storage GET failed: ${resp.statusText}`);
-      }
-      const dataBuffer = Buffer.from(await resp.arrayBuffer());
-      const contentType = resp.headers.get("Content-Type") || "application/octet-stream";
+      if (resp.ok) {
+        const dataBuffer = Buffer.from(await resp.arrayBuffer());
+        const contentType = resp.headers.get("Content-Type") || "application/octet-stream";
 
-      // Cache locally
-      const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
-      try {
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, dataBuffer);
-      } catch (err) {
-        console.warn(`Could not cache getObject locally: ${err.message}`);
-      }
+        // Cache locally for next requests
+        try {
+          fs.mkdirSync(path.dirname(dest), { recursive: true });
+          fs.writeFileSync(dest, dataBuffer);
+        } catch (err) {
+          console.warn(`Could not cache getObject locally: ${err.message}`);
+        }
 
-      return { data: dataBuffer, contentType };
+        return { data: dataBuffer, contentType };
+      }
     } catch (e) {
       console.warn(`Emergent storage getObject failed: ${e.message}. Trying GitHub fallback.`);
     }
   }
 
-  // Try GitHub persistence as durable cloud fallback
+  // 3. Fall back to GitHub
   try {
     const { data, contentType } = await githubGetObject(objectPath);
     // Cache locally
-    const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
     try {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, data);
@@ -236,14 +246,9 @@ async function getObject(objectPath) {
     }
     return { data, contentType };
   } catch (ghErr) {
-    console.warn(`GitHub getObject fallback failed: ${ghErr.message}. Checking local fallback.`);
+    console.warn(`GitHub getObject fallback failed: ${ghErr.message}.`);
   }
 
-  const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
-  if (fs.existsSync(dest)) {
-    const dataBuffer = fs.readFileSync(dest);
-    return { data: dataBuffer, contentType: "application/octet-stream" };
-  }
   throw new Error(`File ${objectPath} not found in any storage provider`);
 }
 
