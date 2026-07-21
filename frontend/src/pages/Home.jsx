@@ -52,7 +52,7 @@ export default function Home() {
         {/* Ambient background blur using the same banner image to pad non-standard aspect ratios beautifully */}
         <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-cover filter blur-2xl opacity-25 scale-105" />
         
-        {/* Full non-cropped main banner image */}
+        {/* Full non-cropped main banner image (using object-contain for full visibility without cropping) */}
         <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-contain" loading="eager" />
         
         {/* Overlays for depth and text legibility */}
