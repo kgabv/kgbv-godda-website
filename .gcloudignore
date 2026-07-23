@@ -1,0 +1,17 @@
+# .gcloudignore file
+.gcloudignore
+.git
+.gitignore
+node_modules/
+**/node_modules/
+frontend/node_modules/
+frontend/build/
+dist/
+.env
+.env.*
+*.log
+.DS_Store
+.vscode/
+.idea/
+memory/
+test_reports/

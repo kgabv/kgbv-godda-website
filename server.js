@@ -13,6 +13,14 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception in server process:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection in server process at:', promise, 'reason:', reason);
+});
+
 const PORT = 3000;
 const EMERGENT_LLM_KEY = process.env.EMERGENT_LLM_KEY || "";
 const APP_NAME = process.env.APP_NAME || "kgbv-godda";
@@ -107,13 +115,28 @@ async function githubPutObject(objectPath, dataBuffer, contentType) {
 }
 
 async function githubGetObject(objectPath) {
+  // 1. Try public raw GitHub content URL first
+  const rawUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/backend/uploads/${objectPath}`;
+  try {
+    const rawResp = await fetch(rawUrl);
+    if (rawResp.ok) {
+      const dataBuffer = Buffer.from(await rawResp.arrayBuffer());
+      return { data: dataBuffer, contentType: getMimeType(objectPath) };
+    }
+  } catch (rawErr) {
+    console.warn(`GitHub raw fetch failed for ${objectPath}: ${rawErr.message}`);
+  }
+
+  // 2. Fall back to GitHub API
   const repoPath = `backend/uploads/${objectPath}`;
   const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${repoPath}`;
   const token = getGithubToken();
   const headers = {
-    "Authorization": `token ${token}`,
     "Accept": "application/vnd.github.v3.raw"
   };
+  if (token) {
+    headers["Authorization"] = `token ${token}`;
+  }
 
   const resp = await fetch(url, { headers });
   if (resp.status === 200) {
@@ -123,7 +146,7 @@ async function githubGetObject(objectPath) {
       const sha = etag.replace(/"/g, '');
       shaCache[objectPath] = sha;
     }
-    return { data: dataBuffer, contentType: "application/octet-stream" };
+    return { data: dataBuffer, contentType: getMimeType(objectPath) };
   } else if (resp.status === 404) {
     throw new Error(`File ${objectPath} not found in GitHub`);
   } else {
@@ -157,6 +180,11 @@ async function putObject(objectPath, dataBuffer, contentType) {
   try {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.writeFileSync(dest, dataBuffer);
+    // Also save backup copy in root uploads directory if path contains subfolders
+    const fallbackDest = path.join(LOCAL_UPLOADS_DIR, path.basename(objectPath));
+    if (fallbackDest !== dest) {
+      try { fs.writeFileSync(fallbackDest, dataBuffer); } catch (e) {}
+    }
   } catch (err) {
     console.warn(`Could not cache putObject locally: ${err.message}`);
   }
@@ -186,28 +214,38 @@ async function putObject(objectPath, dataBuffer, contentType) {
   try {
     return await githubPutObject(objectPath, dataBuffer, contentType);
   } catch (ghErr) {
-    console.error(`GitHub putObject fallback failed: ${ghErr.message}. Falling back to local/tmp.`);
+    console.warn(`GitHub putObject fallback notice: ${ghErr.message}. Preserved locally.`);
   }
 
   return { path: objectPath, size: dataBuffer.length };
 }
 
 async function getObject(objectPath) {
-  const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
-  const isDbCollection = objectPath.startsWith("db_collections/");
+  const candidatePaths = [
+    path.join(LOCAL_UPLOADS_DIR, objectPath),
+    path.join(LOCAL_UPLOADS_DIR, APP_NAME, objectPath),
+    path.join(LOCAL_UPLOADS_DIR, APP_NAME, 'uploads', path.basename(objectPath)),
+    path.join(LOCAL_UPLOADS_DIR, 'uploads', path.basename(objectPath)),
+    path.join(LOCAL_UPLOADS_DIR, 'db_collections', path.basename(objectPath)),
+    path.join(LOCAL_UPLOADS_DIR, path.basename(objectPath))
+  ];
 
-  // 1. Try local cache first for files that are NOT database collections
-  if (!isDbCollection && fs.existsSync(dest)) {
-    try {
-      const stat = fs.statSync(dest);
-      if (stat.size > 0) {
-        const dataBuffer = fs.readFileSync(dest);
-        return { data: dataBuffer, contentType: getMimeType(objectPath) };
+  // 1. Try local disk candidate paths FIRST
+  for (const dest of candidatePaths) {
+    if (fs.existsSync(dest)) {
+      try {
+        const stat = fs.statSync(dest);
+        if (stat.size > 0) {
+          const dataBuffer = fs.readFileSync(dest);
+          return { data: dataBuffer, contentType: getMimeType(objectPath) };
+        }
+      } catch (statErr) {
+        console.warn(`Could not read file stats for ${dest}: ${statErr.message}`);
       }
-    } catch (statErr) {
-      console.warn(`Could not read file stats for ${dest}: ${statErr.message}`);
     }
   }
+
+  const primaryDest = candidatePaths[0];
 
   // 2. Fall back to Emergent Cloud Storage
   if (EMERGENT_LLM_KEY) {
@@ -221,10 +259,12 @@ async function getObject(objectPath) {
         const dataBuffer = Buffer.from(await resp.arrayBuffer());
         const contentType = resp.headers.get("Content-Type") || "application/octet-stream";
 
-        // Cache locally for next requests
+        // Cache locally for next requests if not present
         try {
-          fs.mkdirSync(path.dirname(dest), { recursive: true });
-          fs.writeFileSync(dest, dataBuffer);
+          if (!fs.existsSync(primaryDest)) {
+            fs.mkdirSync(path.dirname(primaryDest), { recursive: true });
+            fs.writeFileSync(primaryDest, dataBuffer);
+          }
         } catch (err) {
           console.warn(`Could not cache getObject locally: ${err.message}`);
         }
@@ -239,29 +279,18 @@ async function getObject(objectPath) {
   // 3. Fall back to GitHub
   try {
     const { data, contentType } = await githubGetObject(objectPath);
-    // Cache locally
+    // Cache locally only if local file is missing
     try {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, data);
+      if (!fs.existsSync(primaryDest)) {
+        fs.mkdirSync(path.dirname(primaryDest), { recursive: true });
+        fs.writeFileSync(primaryDest, data);
+      }
     } catch (err) {
       console.warn(`Could not cache github getObject locally: ${err.message}`);
     }
     return { data, contentType };
   } catch (ghErr) {
     console.warn(`GitHub getObject fallback failed: ${ghErr.message}.`);
-  }
-
-  // 4. For db collections, if cloud storage fetch failed, fall back to local file
-  if (isDbCollection && fs.existsSync(dest)) {
-    try {
-      const stat = fs.statSync(dest);
-      if (stat.size > 0) {
-        const dataBuffer = fs.readFileSync(dest);
-        return { data: dataBuffer, contentType: getMimeType(objectPath) };
-      }
-    } catch (statErr) {
-      console.warn(`Could not read local fallback for ${dest}: ${statErr.message}`);
-    }
   }
 
   throw new Error(`File ${objectPath} not found in any storage provider`);
@@ -287,38 +316,56 @@ const PERSISTENT_COLLECTIONS = [
 
 const collections = {};
 const lastLoaded = {};
-const TTL_MS = 5000;
 
 async function ensureCollectionLoaded(collName, force = false) {
+  // If collection is already in memory and not forced, reuse in-memory data
+  if (!force && collections[collName] && Array.isArray(collections[collName])) {
+    return;
+  }
+
   const now = Date.now();
-  if (!force && lastLoaded[collName]) {
-    const elapsed = now - lastLoaded[collName];
-    if (elapsed < TTL_MS) {
+  const dest = path.join(LOCAL_UPLOADS_DIR, `db_collections/${collName}.json`);
+  const backupDest = path.join(LOCAL_UPLOADS_DIR, `db_collections/${collName}.json.bak`);
+
+  // 1. Check local file on disk first
+  if (fs.existsSync(dest)) {
+    try {
+      const fileData = fs.readFileSync(dest, 'utf-8');
+      const docs = JSON.parse(fileData);
+      collections[collName] = Array.isArray(docs) ? docs : [];
+      lastLoaded[collName] = now;
+      console.info(`Loaded collection ${collName} from local disk (${collections[collName].length} docs)`);
       return;
+    } catch (err) {
+      console.warn(`Local file load corrupt for ${collName}: ${err.message}`);
     }
   }
+
+  // 2. Check local backup file
+  if (fs.existsSync(backupDest)) {
+    try {
+      const fileData = fs.readFileSync(backupDest, 'utf-8');
+      const docs = JSON.parse(fileData);
+      collections[collName] = Array.isArray(docs) ? docs : [];
+      lastLoaded[collName] = now;
+      console.info(`Loaded collection ${collName} from local backup (${collections[collName].length} docs)`);
+      return;
+    } catch (err) {
+      console.warn(`Local backup load corrupt for ${collName}: ${err.message}`);
+    }
+  }
+
+  // 3. Cloud/remote fallback if local disk file doesn't exist
   try {
     const objectPath = `db_collections/${collName}.json`;
     const { data } = await getObject(objectPath);
     const docs = JSON.parse(data.toString('utf-8'));
     collections[collName] = Array.isArray(docs) ? docs : [];
     lastLoaded[collName] = now;
-    console.info(`Loaded collection ${collName} from persistent cloud storage (${collections[collName].length} docs)`);
+    console.info(`Loaded collection ${collName} from cloud storage (${collections[collName].length} docs)`);
   } catch (e) {
-    console.warn(`Could not load collection ${collName} from cloud storage (checking local file cache): ${e.message}`);
-    const dest = path.join(LOCAL_UPLOADS_DIR, `db_collections/${collName}.json`);
-    if (fs.existsSync(dest)) {
-      try {
-        const docs = JSON.parse(fs.readFileSync(dest, 'utf-8'));
-        collections[collName] = Array.isArray(docs) ? docs : [];
-        console.info(`Loaded collection ${collName} from local file cache (${collections[collName].length} docs)`);
-      } catch (err) {
-        console.warn(`Local cache corrupt for ${collName}: ${err.message}`);
-        if (!collections[collName]) collections[collName] = [];
-      }
-    } else {
-      if (!collections[collName]) collections[collName] = [];
-    }
+    console.warn(`Could not load collection ${collName} from storage: ${e.message}`);
+    if (!collections[collName]) collections[collName] = [];
     lastLoaded[collName] = now;
   }
 }
@@ -330,18 +377,35 @@ async function persistCollection(collName) {
       const { _id, ...rest } = d;
       return rest;
     });
-    const contentBytes = Buffer.from(JSON.stringify(cleanDocs), 'utf-8');
+    const contentBytes = Buffer.from(JSON.stringify(cleanDocs, null, 2), 'utf-8');
     const objectPath = `db_collections/${collName}.json`;
 
     const dest = path.join(LOCAL_UPLOADS_DIR, objectPath);
+    const backupDest = path.join(LOCAL_UPLOADS_DIR, `db_collections/${collName}.json.bak`);
+    
     fs.mkdirSync(path.dirname(dest), { recursive: true });
+    
+    // Write directly to local disk
     fs.writeFileSync(dest, contentBytes);
 
-    await putObject(objectPath, contentBytes, "application/json");
+    // Also write to local backup
+    try {
+      fs.writeFileSync(backupDest, contentBytes);
+    } catch (bErr) {
+      console.warn(`Could not write backup file for ${collName}: ${bErr.message}`);
+    }
+
     lastLoaded[collName] = Date.now();
-    console.info(`Persisted collection ${collName} to cloud storage (${cleanDocs.length} docs)`);
+
+    // Trigger non-blocking cloud backup
+    putObject(objectPath, contentBytes, "application/json").catch(err => {
+      console.warn(`Cloud storage backup notice for ${collName}: ${err.message}`);
+    });
+
+    console.info(`[SUCCESS] Persisted collection ${collName} to local disk (${cleanDocs.length} docs)`);
   } catch (e) {
-    console.error(`Failed to persist collection ${collName} to cloud storage: ${e.message}`);
+    console.error(`Failed to persist collection ${collName}: ${e.message}`);
+    throw e;
   }
 }
 
@@ -461,7 +525,8 @@ app.use(cors({
   origin: true,
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
 
 const apiRouter = express.Router();
@@ -550,6 +615,10 @@ apiRouter.post("/auth/session", async (req, res) => {
 
 apiRouter.post("/auth/demo-login", async (req, res) => {
   try {
+    const { password } = req.body || {};
+    if (password !== "12354") {
+      return res.status(401).json({ detail: "गलत पासवर्ड! कृपया सही पासवर्ड दर्ज करें।" });
+    }
     const userId = "user_demo_admin";
     const email = "admin@test.com";
     const name = "परीक्षण एडमिन (Demo Admin)";
@@ -1203,19 +1272,26 @@ apiRouter.get("/files/*", async (req, res) => {
   try {
     const objectPath = req.params[0];
     await ensureCollectionLoaded("files");
-    const { data, contentType } = await getObject(objectPath);
+    try {
+      const { data, contentType } = await getObject(objectPath);
 
-    const record = (collections["files"] || []).find(f => f.storage_path === objectPath);
-    let mediaType = record ? record.content_type : null;
-    if (!mediaType || mediaType === "application/octet-stream") {
-      mediaType = contentType;
-    }
-    if (!mediaType || mediaType === "application/octet-stream") {
-      mediaType = getMimeType(objectPath);
-    }
+      const record = (collections["files"] || []).find(f => f.storage_path === objectPath);
+      let mediaType = record ? record.content_type : null;
+      if (!mediaType || mediaType === "application/octet-stream") {
+        mediaType = contentType;
+      }
+      if (!mediaType || mediaType === "application/octet-stream") {
+        mediaType = getMimeType(objectPath);
+      }
 
-    res.setHeader("Content-Type", mediaType);
-    res.send(data);
+      res.setHeader("Content-Type", mediaType);
+      res.setHeader("Content-Length", data.length);
+      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      res.setHeader("Accept-Ranges", "bytes");
+      return res.send(data);
+    } catch (err) {
+      return res.status(404).json({ detail: "File not found" });
+    }
   } catch (err) {
     res.status(404).json({ detail: "File not found" });
   }
@@ -1325,7 +1401,25 @@ async function seed() {
     },
     "hostel": {
       "heading": "आवासीय छात्रावास",
+      "subheading": "कस्तूरबा गांधी बालिका विद्यालय, गोड्डा — सुरक्षित एवं आरामदायक आवास",
+      "main_image": "https://images.unsplash.com/photo-1573894998033-c0cef4ed722b?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "desktop_banner": "https://images.unsplash.com/photo-1573894998033-c0cef4ed722b?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "mobile_banner": "",
+      "facilities_heading": "छात्रावास परिचय एवं सुविधाएँ",
+      "facilities_description": "सुरक्षित, स्वच्छ एवं आरामदायक छात्रावास सुविधा। 24×7 वार्डन उपस्थिति, पौष्टिक भोजन, चिकित्सा सहायता एवं अध्ययन कक्ष।",
       "body": "सुरक्षित, स्वच्छ एवं आरामदायक छात्रावास सुविधा। 24×7 वार्डन उपस्थिति, पौष्टिक भोजन, चिकित्सा सहायता एवं अध्ययन कक्ष।",
+      "additional_blocks": [
+        {
+          "id": "block-1",
+          "title": "सुरक्षा एवं नियम",
+          "description": "24 घंटे सुरक्षा प्रहरी, महिला गार्ड, CCTV निगरानी एवं अनुशासित वातावरण।"
+        },
+        {
+          "id": "block-2",
+          "title": "भोजन एवं दिनचर्या",
+          "description": "समय सारणी के अनुसार पौष्टिक नाश्ता, दोपहर व रात्रि का संतुलित भोजन तथा नियमित अध्ययन समय।"
+        }
+      ],
       "images": [
         {
           "id": "default-1",
@@ -1358,7 +1452,12 @@ async function seed() {
       "primary": "#0056B3",
       "secondary": "#00A0E4",
       "accent": "#E1F3FB",
-      "background": "#F5F9FE"
+      "background": "#F5F9FE",
+      "ticker_bg": "#E6F4FA",
+      "ticker_text": "#003D82",
+      "ticker_icon": "#00A0E4",
+      "ticker_border": "#B3E0F2",
+      "ticker_hover": "#002B5C"
     }
   };
 
@@ -1383,22 +1482,33 @@ async function seed() {
 
 app.use("/api", apiRouter);
 
-const frontendDir = path.join(__dirname, 'frontend', 'build');
-if (fs.existsSync(frontendDir)) {
-  console.info(`Serving frontend static files from ${frontendDir}`);
-  app.use(express.static(frontendDir));
+// Global Express Error Handler for API & Body Parser Errors
+app.use((err, req, res, next) => {
+  console.error("Global express error:", err);
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({ detail: err.message || "An unexpected error occurred" });
+});
 
-  app.get('*', (req, res) => {
-    if (req.path.startsWith('/api')) {
-      return res.status(404).send('API endpoint not found');
-    }
-    res.sendFile(path.join(frontendDir, 'index.html'));
-  });
-} else {
-  console.warn(`Frontend build directory not found at ${frontendDir}. Operating in API-only mode.`);
-}
+const frontendDir = path.join(__dirname, 'frontend', 'build');
+console.info(`Mounted frontend static directory from ${frontendDir}`);
+app.use(express.static(frontendDir));
+
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ detail: 'API endpoint not found' });
+  }
+  const indexPath = path.join(frontendDir, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  res.status(503).send('Frontend build is missing or in progress.');
+});
 
 async function start() {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.info(`Server running on http://0.0.0.0:${PORT}`);
+  });
+
   try {
     try {
       await initStorage();
@@ -1408,13 +1518,15 @@ async function start() {
     }
 
     console.info("Loading persistent collections from cloud storage...");
-    for (const coll of PERSISTENT_COLLECTIONS) {
-      try {
-        await ensureCollectionLoaded(coll, true);
-      } catch (err) {
-        console.warn(`Initial load failed for ${coll}: ${err.message}`);
-      }
-    }
+    await Promise.allSettled(
+      PERSISTENT_COLLECTIONS.map(async (coll) => {
+        try {
+          await ensureCollectionLoaded(coll, true);
+        } catch (err) {
+          console.warn(`Initial load failed for ${coll}: ${err.message}`);
+        }
+      })
+    );
 
     try {
       await seed();
@@ -1422,13 +1534,8 @@ async function start() {
     } catch (err) {
       console.error(`Database seeding failed: ${err.message}`);
     }
-
-    app.listen(PORT, '0.0.0.0', () => {
-      console.info(`Server running on http://0.0.0.0:${PORT}`);
-    });
   } catch (err) {
-    console.error(`Failed to start server: ${err.message}`);
-    process.exit(1);
+    console.error(`Error during background initialization: ${err.message}`);
   }
 }
 

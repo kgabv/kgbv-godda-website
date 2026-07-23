@@ -87,6 +87,9 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Mukta', 'Noto Sans Devanagari', sans-seri
   100% { transform: translateX(-50%); }
 }
 .ticker-track { animation: ticker-slide 45s linear infinite; }
+.ticker-item:hover {
+  color: var(--ticker-hover, #002B5C) !important;
+}
 
 /* Fade-up */
 @keyframes fadeUp {

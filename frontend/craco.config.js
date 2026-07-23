@@ -8,7 +8,7 @@ const isDevServer = process.env.NODE_ENV !== "production";
 
 // Environment variable overrides
 const config = {
-  enableHealthCheck: process.env.ENABLE_HEALTH_CHECK === "true",
+  enableHealthCheck: false,
 };
 
 function makeDevServerV5Compatible(devServerConfig) {

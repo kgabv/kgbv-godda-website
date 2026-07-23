@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { GraduationCap, Home as HomeIcon, ShieldCheck, Utensils, Wifi, BookOpen, FlaskConical, Cpu, Camera, Users, Trophy, Sparkles, ArrowRight } from "lucide-react";
-import { api, LOGO_URL, asArray } from "../lib/api";
+import { api, LOGO_URL, asArray, resolveImageUrl, DEFAULT_FALLBACK_IMAGE } from "../lib/api";
 import AnimatedCounter from "../components/AnimatedCounter";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -22,75 +22,29 @@ const FAC = [
 ];
 
 export default function Home() {
-  const [hero, setHero] = useState(() => {
-    try {
-      const cached = localStorage.getItem("kgbv-hero-cache");
-      return cached ? JSON.parse(cached) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [about, setAbout] = useState(() => {
-    try {
-      const cached = localStorage.getItem("kgbv-about-cache");
-      return cached ? JSON.parse(cached) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [hero, setHero] = useState(null);
+  const [about, setAbout] = useState(null);
   const [gallery, setGallery] = useState([]);
-  
-  // Initialize from localStorage cache to prevent blinking / blank hero on refresh
-  const [banners, setBanners] = useState(() => {
-    try {
-      const cached = localStorage.getItem("kgbv-banners-cache");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to parse kgbv-banners-cache", e);
-    }
-    return [{ id: "default", image_url: HERO_IMG, is_active: true }];
-  });
-
+  const [banners, setBanners] = useState([{ id: "default", image_url: HERO_IMG, is_active: true }]);
   const [stats, setStats] = useState({ students: 500, teachers: 30, classes: 7, awards: 45 });
   const [bIdx, setBIdx] = useState(0);
 
   useEffect(() => {
     api.get("/site-content/hero").then((r) => {
-      if (r.data?.value) {
-        setHero(r.data.value);
-        try {
-          localStorage.setItem("kgbv-hero-cache", JSON.stringify(r.data.value));
-        } catch {}
-      }
+      if (r.data?.value) setHero(r.data.value);
     }).catch(() => {});
 
     api.get("/site-content/about").then((r) => {
-      if (r.data?.value) {
-        setAbout(r.data.value);
-        try {
-          localStorage.setItem("kgbv-about-cache", JSON.stringify(r.data.value));
-        } catch {}
-      }
+      if (r.data?.value) setAbout(r.data.value);
     }).catch(() => {});
 
     api.get("/gallery").then((r) => setGallery(asArray(r.data).slice(0, 6))).catch(() => setGallery([]));
     
-    // Fetch banners with strict guard to never overwrite with empty or invalid data
     api.get("/banners")
       .then((r) => {
         const fetched = asArray(r.data).filter(b => b && b.image_url);
         if (fetched.length > 0) {
           setBanners(fetched);
-          try {
-            localStorage.setItem("kgbv-banners-cache", JSON.stringify(fetched));
-          } catch (e) {
-            console.warn("Failed to set kgbv-banners-cache", e);
-          }
         }
       })
       .catch((err) => {
@@ -106,19 +60,31 @@ export default function Home() {
     return () => clearInterval(t);
   }, [banners.length]);
 
-  const heroBg = banners[bIdx]?.image_url || HERO_IMG;
+  const rawHeroBg = banners[bIdx]?.image_url || HERO_IMG;
+  const heroBg = resolveImageUrl(rawHeroBg, HERO_IMG);
 
   return (
     <div data-testid="home-page">
       {/* Hero */}
       <section className="relative overflow-hidden bg-slate-950 min-h-[350px] sm:min-h-[500px] md:min-h-[550px] lg:min-h-[600px] flex flex-col justify-center">
-        {/* Ambient background blur using the same banner image to pad non-standard aspect ratios beautifully */}
-        <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-cover filter blur-2xl opacity-25 scale-105" />
+        <img 
+          src={heroBg} 
+          alt="" 
+          className="absolute inset-0 h-full w-full object-cover filter blur-2xl opacity-25 scale-105" 
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
         
-        {/* Full non-cropped main banner image (using object-contain for full visibility without cropping) */}
-        <img src={heroBg} alt="" className="absolute inset-0 h-full w-full object-contain" loading="eager" />
+        <img 
+          src={heroBg} 
+          alt="" 
+          className="absolute inset-0 h-full w-full object-contain" 
+          loading="eager" 
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = HERO_IMG;
+          }}
+        />
         
-        {/* Overlays for depth and text legibility */}
         <div className="absolute inset-0 bg-black/45 hero-overlay" />
         
         <div className="relative max-w-7xl mx-auto px-4 py-24 md:py-36 text-white w-full z-10">
@@ -168,7 +134,15 @@ export default function Home() {
           </>
         ) : (
           <>
-            <img src={about.image_url || ABOUT_IMG} alt="Students" className="rounded-3xl shadow-xl object-cover w-full h-[380px]" />
+            <img 
+              src={resolveImageUrl(about.image_url, ABOUT_IMG)} 
+              alt="Students" 
+              className="rounded-3xl shadow-xl object-cover w-full h-[380px]" 
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = ABOUT_IMG;
+              }}
+            />
             <div>
               <div className="inline-flex items-center gap-2 text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">
                 <Sparkles className="h-4 w-4" /> हमारे बारे में
@@ -226,15 +200,19 @@ export default function Home() {
         <div className="mt-8 grid grid-cols-2 md:grid-cols-3 gap-3">
           {asArray(gallery).map((g, i) => (
             <motion.img
-              key={g.id}
-              src={g.image_url}
-              alt={g.title}
+              key={g.id || i}
+              src={resolveImageUrl(g.image_url)}
+              alt={g.title || "Gallery image"}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.05 }}
               className={`w-full object-cover rounded-2xl shadow-md ${i % 5 === 0 ? "h-64 md:col-span-2" : "h-40 md:h-56"}`}
               loading="lazy"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = DEFAULT_FALLBACK_IMAGE;
+              }}
             />
           ))}
         </div>

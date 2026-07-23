@@ -38,6 +38,13 @@ function apply(t) {
     const parts = hexToHslParts(t[k]);
     if (parts) root.style.setProperty(cssVar, parts);
   });
+
+  // Announcement Bar (News Ticker) CSS variables
+  root.style.setProperty("--ticker-bg", t.ticker_bg || "#E6F4FA");
+  root.style.setProperty("--ticker-text", t.ticker_text || "#003D82");
+  root.style.setProperty("--ticker-icon", t.ticker_icon || "#00A0E4");
+  root.style.setProperty("--ticker-border", t.ticker_border || "#B3E0F2");
+  root.style.setProperty("--ticker-hover", t.ticker_hover || "#002B5C");
 }
 
 export default function ThemeApplier() {

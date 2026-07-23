@@ -11,6 +11,8 @@ env/
 
 # Node
 node_modules/
+**/node_modules/
+frontend/node_modules/
 npm-debug.log
 yarn-error.log
 yarn-debug.log
@@ -22,6 +24,7 @@ frontend/.env
 
 # Build
 build/
+**/build/
 dist/
 .next/
 
